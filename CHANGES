@@ -1,0 +1,8 @@
+X12::Parser 0.02
+
+1. Fixed problem with parser running out of memory.
+   Still has issue with very large files.
+
+
+X12::Parser 0.01 - initital release
+
