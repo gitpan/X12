@@ -18,144 +18,177 @@ our @ISA = qw(Exporter);
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
 
-# This allows declaration	use X12::Parser::Cf ':all';
+# This allows declaration    use X12::Parser::Cf ':all';
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
 our %EXPORT_TAGS = ( 'all' => [ qw(
-	
+    
 ) ] );
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 our @EXPORT = qw(
-	
+    
 );
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 # Preloaded methods go here.
 my $level = 0;
+my @array = ();
+my @loop  = ();
+
+
 
 #--- Cf::new
 sub new {
-	my $self = {};
+    my $self = {
+        looptree        => [],        #ref to an array
+        segmentstart    => {},        #ref to a hash
+    };
 
-	my @LOOPTREE;
-	my %SEGMENTSTART;
-	my @array;
-	my @loop;
-
-	$self->{looptree}  = \@LOOPTREE;
-	$self->{segmentstart} = \%SEGMENTSTART;
-	$self->{array}     = \@array;
-	$self->{loop}      = \@loop;
-
-	bless($self);
-	return $self;
+    bless($self);
+    return $self;
 }
- 
+
 #--- Cf::load
 sub load {
-	my ($self, $file) = @_;
+    my ($self, $file) = @_;
 
-	open(FILE, "$file") || die "error: cannot open cf file $file\n";
-	@{$self->{array}} = <FILE>;
-	chop(@{$self->{array}});
-	close(FILE);
+    open(FILE, "$file") || die "error: cannot open cf file $file\n";
+    @array = <FILE>;
+    chop(@array);
+    close(FILE);
 
-	$self->_find_LOOPS();
-	$self->_parse_loops();
+    $self->_find_LOOPS();
+    $self->_parse_loops();
 
-	$self->{array} = ();
-	$self->{loop} = ();
+    @array = ();
+    @loop = ();
 }
 
 #--- Cf::_find_LOOPS
 #--- local
 sub _find_LOOPS {
-	my $self = shift;
-	for (my $i=0; $i<@{$self->{array}}; $i++) {
-		if ( ${$self->{array}}[$i] eq "[LOOPS]" ) {
-		LABEL_A:
-			$i++;
-			if ( ${$self->{array}}[$i] =~ /^\n/  || ${$self->{array}}[$i] =~ /^#/ ||
-				${$self->{array}}[$i] =~ /^\[/ ) {
-				last;
-			}
-			else {
-				push( @{$self->{loop}}, ${$self->{array}}[$i]);
-				goto LABEL_A;
-			}
-		}
-	}
+    my $self = shift;
+    for (my $i=0; $i<@array; $i++) {
+        if ( $array[$i] eq "[LOOPS]" ) {
+        LABEL_A:
+            $i++;
+            if ( $array[$i] =~ /^\n/  || $array[$i] =~ /^#/ ||
+                $array[$i] =~ /^\[/ ) {
+                last;
+            }
+            else {
+                push( @loop, $array[$i]);
+                goto LABEL_A;
+            }
+        }
+    }
 }
 
 #--- local Cf::_parse_loops
 #--- local
 sub _parse_loops {
-	my $self = shift;
-	foreach my $loop (@{$self->{loop}}) {
-		$level = 0;
-		$self->_parse_loop ($loop);
-	}
-	foreach my $loop (@{$self->{loop}}) {
-		$self->_parse_segment ($loop);
-	}
+    my $self = shift;
+    foreach my $loop (@loop) {
+        $level = 0;
+        $self->_parse_loop ($loop);
+    }
+    foreach my $loop (@loop) {
+        $self->_parse_segment ($loop);
+    }
 }
 
 #--- local Cf::_parse_loop
 #--- local
 sub _parse_loop {
-	my $self = shift;
-	my $loop = shift;
+    my $self = shift;
+    my $loop = shift;
 
-	$level++;
+    $level++;
 
-	for (my $i=0; $i<@{$self->{array}}; $i++) {
-		if ( ${$self->{array}}[$i] eq "[$loop]" ) {
-			push ( @{$self->{looptree}}, [ $level, $loop ] );
-			LABEL_C:
-			$i++;
-			if ( ${$self->{array}}[$i] =~ /^segment=/ ) {
-				goto LABEL_C;
-			}
-			if ( ${$self->{array}}[$i] =~ /^loop=/ ) {
-				my @temp = split ( /=/, ${$self->{array}}[$i] );
-				$self->_parse_loop ($temp[1], $level);
-				$level--;
-				goto LABEL_C;
-			}
-			else {
-				return;
-			}
-		}
-	}
+    for (my $i=0; $i<@array; $i++) {
+        if ( $array[$i] eq "[$loop]" ) {
+            push ( @{$self->{looptree}}, [ $level, $loop ] );
+            LABEL_C:
+            $i++;
+            if ( $array[$i] =~ /^segment=/ ) {
+                goto LABEL_C;
+            }
+            if ( $array[$i] =~ /^loop=/ ) {
+                my @temp = split ( /=/, $array[$i] );
+                $self->_parse_loop ($temp[1], $level);
+                $level--;
+                goto LABEL_C;
+            }
+            else {
+                return;
+            }
+        }
+    }
 }
 
 #--- local Cf::_segment
 #--- local
 sub _parse_segment {
-	my $self = shift;
-	my $loop = shift;
-	for (my $i=0; $i<@{$self->{array}}; $i++) {
-		if ( ${$self->{array}}[$i] eq "[$loop]" ) {
-			LABEL_B:
-			$i++;
-			if ( ${$self->{array}}[$i] =~ /^segment=/ ) {
-				my @temp  = split ( /=/, ${$self->{array}}[$i] );
-				push ( @{$self->{segmentstart}->{$loop}}, $temp[1] );
-				goto LABEL_B;
-			}
-			elsif ( ${$self->{array}}[$i] =~ /^loop=/ ) {
-				my @temp = split ( /=/, ${$self->{array}}[$i] );
-				$self->_parse_segment ($temp[1]);
-				goto LABEL_B;
-			}
-			else {
-				return;
-			}
-		}
-	}
+    my $self = shift;
+    my $loop = shift;
+    for (my $i=0; $i<@array; $i++) {
+        if ( $array[$i] eq "[$loop]" ) {
+            LABEL_B:
+            $i++;
+            if ( $array[$i] =~ /^segment=/ ) {
+                my @temp  = split ( /=/, $array[$i] );
+                push ( @{$self->{segmentstart}->{$loop}}, $temp[1] );
+                goto LABEL_B;
+            }
+            elsif ( $array[$i] =~ /^loop=/ ) {
+                my @temp = split ( /=/, $array[$i] );
+                $self->_parse_segment ($temp[1]);
+                goto LABEL_B;
+            }
+            else {
+                return;
+            }
+        }
+    }
 }
+
+#--- Cf::get_level_one
+sub get_level_one {
+    my $self = shift;
+    my @temp = ();
+    for ( my $i=0; $i < @{$self->{looptree}}; $i++ ) {
+        if ( $self->{looptree}->[$i][0] == 1 ) {
+            push ( @temp, $i );
+        }
+    }
+    return @temp;
+}
+
+#--- Cf::get_next_level
+sub get_next_level {
+    my $self = shift;
+    my $current_pos  = shift;
+    my $current_level = $self->{looptree}->[$current_pos][0] || 0;
+    my $next_level = $self->{looptree}->[$current_pos + 1][0] || 0;
+    my @temp = ();
+
+    if ( $current_level < $next_level ) {
+        $current_pos++;
+        while ( $self->{looptree}->[$current_pos][0] > $current_level ) {
+            if ( $self->{looptree}->[$current_pos][0] == $next_level ) {
+                push ( @temp, $current_pos );
+            }
+            $current_pos++;
+        }
+    }
+    else {
+        push ( @temp , 'END' );
+    }
+    return @temp;
+}
+
 
 1;
 __END__

@@ -1,7 +1,23 @@
+X12::Parser 0.04
+
+1. Moved _get_level_one and _get_next_level functions from
+Parser.pm to Cf.pm (the new functions in Cf.pm are called
+get_level_one and get_next_level). This keeps configuration
+related functions within the Cf.pm module.
+
+2. Moved $self members/elements to file globals.
+
+3. Changed $c_L to $current_level and $s to $element_seperator
+
+4. Added $segment_seperator. Added get_segment_seperator() and
+get_element_seperator() functions. Modified $line_seperator to
+$orig_line_seperator
+   
+
 X12::Parser 0.03
 
 1. Fixed problem with parser running out of memory.
-   Still has issue with very large files.
+Still has issue with very large files.
 
 
 X12::Parser 0.01 - initital release

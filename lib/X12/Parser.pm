@@ -31,22 +31,26 @@ our @EXPORT = qw(
     
 );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 # Preloaded methods go here.
 use X12::Parser::Cf;
-my $s = undef;
-my $c_L = undef;
+my $current_level     = undef;
+my $element_seperator = undef;
+my $segment_seperator = undef;
+
+my $cf       = undef;
+my $where    = -1;
+my $size     = -1;
+my @array    = ();
+my $analysis = undef;
+
 
 sub new {
-    my $self = {};
-    $self->{file} = undef;
-    $self->{conf} = undef;
-    $self->{cf} = undef;
-    $self->{array} = undef;
-    $self->{analysis} = undef;
-    $self->{where} = -1;
-    $self->{size} = -1;
+    my $self = {
+        file        => undef,
+        conf        => undef,
+    };
     return bless $self;
 }
 
@@ -54,48 +58,59 @@ sub new {
 sub parse {
     my $self = shift;
     my %params = @_;
-    my $ANALYSIS = undef;
-    my $size = undef;
     $self->{file} = $params{file};
     $self->{conf} = $params{conf};
-    $self->{analysis} = \$ANALYSIS;
-    $self->{size} = \$size;
     $self->_load;
-    for ( my $i=0; $i<$self->{size}; $i++ ) {
-        vec ( $self->{analysis}, $i, 16 ) = 0xFFFF;
+    for ( my $i=0; $i<$size; $i++ ) {
+        vec ( $analysis, $i, 16 ) = 0xFFFF;
     }
-    $c_L = 1;
-    my @level_one = $self->_get_level_one;
+    $current_level = 1;
+    my @level_one = $cf->get_level_one;
     $self->_parse ( 0, \@level_one );
 }
 
 
 sub _load {
     my $self = shift;
-    my $cf = new X12::Parser::Cf;
-    $self->{cf}  = $cf;
+
+    my $orig_line_seperator = undef;
+    my $isa            = undef;
+
+    $cf  = new X12::Parser::Cf;
     $cf->load ("$self->{conf}") if defined $self->{conf};
 
     open (FILE, "$self->{file}") || die "error: cannot open file $self->{file}\n";
-    my $isa = undef;
     if ( read(FILE, $isa, 106) != 106 ) {
         close (FILE);
         die "error: invalid file format $self->{file}\n";
     }
 
-    my $line_seperator = $/;
+    $orig_line_seperator = $/;
 
-    $/ = substr ($isa, 105, 1);
-    $s = substr ($isa, 3, 1);
+    $segment_seperator = substr ($isa, 105, 1);
+    $element_seperator = substr ($isa, 3, 1);
+
+    $/ = $segment_seperator;
 
     seek (FILE, 0, 0);
-    my @array = <FILE>;
+    @array = <FILE>;
     close (FILE);
     chop(@array);
-    $self->{array} = \@array;
-    $self->{size} = @array;
+    $size = @array;
 
-    $/ = $line_seperator;
+    $/ = $orig_line_seperator;
+}
+
+
+sub get_segment_seperator {
+    my $self = shift;
+    return $segment_seperator;
+}
+
+
+sub get_element_seperator {
+    my $self = shift;
+    return $element_seperator;
 }
 
 
@@ -106,26 +121,26 @@ sub _parse {
     my ($segment, @segment );
 
     RECURSION:
-    for (my $i=$array_pos; $i<$self->{size}; $i++) {
-        $segment = $self->{array}->[$i];
-        @segment = split ( /\Q$s\E/, $segment );
+    for (my $i=$array_pos; $i<$size; $i++) {
+        $segment = $array[$i];
+        @segment = split ( /\Q$element_seperator\E/, $segment );
 
         for my $level_handle (@array_of_handles) {
             foreach my $pos (@$level_handle) {
-                my $loop = $self->{cf}->{looptree}->[$pos][1];
-                my @left = split ( /:/, $self->{cf}->{segmentstart}->{$loop}->[0] );
+                my $loop = $cf->{looptree}->[$pos][1];
+                my @left = split ( /:/, $cf->{segmentstart}->{$loop}->[0] );
                 if ( $left[0] eq $segment[0] ) {
                     if ( $left[2] eq "" ) {
-                        vec ( $self->{analysis}, $i, 16 ) = $pos;
-                        my $diff = $c_L - $self->{cf}->{looptree}->[$pos][0];
-                        $c_L =  $self->{cf}->{looptree}->[$pos][0];
+                        vec ( $analysis, $i, 16 ) = $pos;
+                        my $diff = $current_level - $cf->{looptree}->[$pos][0];
+                        $current_level =  $cf->{looptree}->[$pos][0];
                         while ( $diff > 0 ) {
                             shift ( @array_of_handles );
                             $diff--;
                         }
-                        my @next_level = $self->_get_next_level ( $pos );
+                        my @next_level = $cf->get_next_level ( $pos );
                         if ( 'END' ne $next_level[0] ) {
-                            $c_L++;
+                            $current_level++;
                             my $ref = \@next_level;
                             unshift ( @array_of_handles, $ref );
                             $array_pos = $i + 1;
@@ -136,16 +151,16 @@ sub _parse {
                     else {
                         my @qual = split ( /,/, $left[2] );
                         if (( grep { $_ eq $segment[$left[1]] } @qual )) {
-                            vec ( $self->{analysis}, $i, 16 ) = $pos;
-                            my $diff = $c_L - $self->{cf}->{looptree}->[$pos][0];
-                            $c_L =  $self->{cf}->{looptree}->[$pos][0];
+                            vec ( $analysis, $i, 16 ) = $pos;
+                            my $diff = $current_level - $cf->{looptree}->[$pos][0];
+                            $current_level =  $cf->{looptree}->[$pos][0];
                             while ( $diff > 0 ) {
                                 shift ( @array_of_handles );
                                 $diff--;
                             }
-                            my @next_level = $self->_get_next_level ( $pos );
+                            my @next_level = $cf->get_next_level ( $pos );
                             if ( 'END' ne $next_level[0] ) {
-                                $c_L++;
+                                $current_level++;
                                 my $ref = \@next_level;
                                 unshift ( @array_of_handles, $ref );
                                 $array_pos = $i + 1;
@@ -162,52 +177,17 @@ sub _parse {
 }
 
 
-sub _get_level_one {
-    my $self = shift;
-    my @temp = (); 
-    for ( my $i=0; $i < @{$self->{cf}->{looptree}}; $i++ ) {
-        if ( $self->{cf}->{looptree}->[$i][0] == 1 ) {
-            push ( @temp, $i );
-        }
-    }
-    return @temp;
-}
-
-
-sub _get_next_level {
-    my $self = shift;
-    my $current_pos  = shift;
-    my $current_level = $self->{cf}->{looptree}->[$current_pos][0] || 0;
-    my $next_level = $self->{cf}->{looptree}->[$current_pos + 1][0] || 0;
-    my @temp = (); 
-
-    if ( $current_level < $next_level ) {
-        $current_pos++;
-        while ( $self->{cf}->{looptree}->[$current_pos][0] > $current_level ) {
-            if ( $self->{cf}->{looptree}->[$current_pos][0] == $next_level ) {
-                push ( @temp, $current_pos );
-            }
-            $current_pos++;
-        }
-    }
-    else {
-        push ( @temp , 'END' );
-    }
-    return @temp;
-}
-
-
 sub get_next_loop {
     my $self = shift;
-    my $i    = $self->{where};
+    my $i    = $where;
 
-    for ( $i++ ;$i<$self->{size}; $i++ ) {
-        if ( vec ( $self->{analysis}, $i, 16 ) != 0xFFFF ) {
-            $self->{where} = $i;
-            return ( $self->{cf}->{looptree}->[vec($self->{analysis},$i,16)]->[1] );
+    for ( $i++ ;$i<$size; $i++ ) {
+        if ( vec ( $analysis, $i, 16 ) != 0xFFFF ) {
+            $where = $i;
+            return ( $cf->{looptree}->[vec($analysis,$i,16)]->[1] );
         }
     }
-    if ( $i >= $self->{size} ) {
+    if ( $i >= $size ) {
         return 0;
     }
 }
@@ -217,29 +197,29 @@ sub get_loop_segments {
     my $self = shift;
     my $loop = shift;
     my @temp = ();
-    my $i    = $self->{where};
+    my $i    = $where;
 
-    if ( $self->{cf}->{looptree}->[vec ( $self->{analysis}, $i, 16 )]->[1] ne $loop ) {
+    if ( $cf->{looptree}->[vec ( $analysis, $i, 16 )]->[1] ne $loop ) {
         return @temp;
     }
     do {
-        push ( @temp, $self->{array}->[$i] );
-    } while ( vec ( $self->{analysis}, ++$i, 16 ) == 0xFFFF && $i < $self->{size} );
+        push ( @temp, $array[$i] );
+    } while ( vec ( $analysis, ++$i, 16 ) == 0xFFFF && $i < $size );
     return @temp;
 }
 
 
 sub get_next_pos_loop {
     my $self = shift;
-    my $i    = $self->{where};
+    my $i    = $where;
 
-    for ( $i++ ;$i < $self->{size}; $i++ ) {
-        if ( vec ( $self->{analysis}, $i, 16 ) != 0xFFFF ) {
-            $self->{where} = $i;
-            return ( $i, $self->{cf}->{looptree}->[vec($self->{analysis},$i,16)]->[1] );
+    for ( $i++ ;$i < $size; $i++ ) {
+        if ( vec ( $analysis, $i, 16 ) != 0xFFFF ) {
+            $where = $i;
+            return ( $i, $cf->{looptree}->[vec($analysis,$i,16)]->[1] );
         }
     }
-    if ( $i >= $self->{size} ) {
+    if ( $i >= $size ) {
         return;
     }
 }
@@ -247,16 +227,16 @@ sub get_next_pos_loop {
 
 sub get_next_pos_level_loop {
     my $self = shift;
-    my $i    = $self->{where};
+    my $i    = $where;
 
-    for ( $i++ ;$i < $self->{size}; $i++ ) {
-        if ( vec ( $self->{analysis}, $i, 16 ) != 0xFFFF ) {
-            $self->{where} = $i;
-            return ( $i, $self->{cf}->{looptree}->[vec($self->{analysis},$i,16)]->[0],
-                         $self->{cf}->{looptree}->[vec($self->{analysis},$i,16)]->[1] );
+    for ( $i++ ;$i < $size; $i++ ) {
+        if ( vec ( $analysis, $i, 16 ) != 0xFFFF ) {
+            $where = $i;
+            return ( $i, $cf->{looptree}->[vec($analysis,$i,16)]->[0],
+                         $cf->{looptree}->[vec($analysis,$i,16)]->[1] );
         }
     }
-    if ( $i >= $self->{size} ) {
+    if ( $i >= $size ) {
         return;
     }
 }
@@ -267,19 +247,19 @@ sub get_segments {
     my $i    = shift;
     my @temp = ();
 
-    if ( $i < 0 || $i >= $self->{size} ) {
+    if ( $i < 0 || $i >= $size ) {
         return @temp;
     }
     do {
-        push ( @temp, $self->{array}->[$i] );
-    } while ( vec ( $self->{analysis}, ++$i, 16 ) == 0xFFFF && $i < $self->{size} );
+        push ( @temp, $array[$i] );
+    } while ( vec ( $analysis, ++$i, 16 ) == 0xFFFF && $i < $size );
     return @temp;
 }
 
 
 sub reset_pos {
     my $self = shift;
-    $self->{where} = -1;
+    $where = -1;
 }
 
 
@@ -289,16 +269,16 @@ sub print_tree {
     my $pad   = undef;
     my $level = undef;
 
-    for (my $i=0; $i<$self->{size}; ) {
-        $level = $self->{cf}->{looptree}->[vec($self->{analysis},$i,16)]->[0];
+    for (my $i=0; $i<$size; ) {
+        $level = $cf->{looptree}->[vec($analysis,$i,16)]->[0];
         if ( $level != 0 ) {
             $pad = '  |' x $level; 
-            print "       $pad--$self->{cf}->{looptree}->[vec($self->{analysis},$i,16)]->[1]\n";
+            print "       $pad--$cf->{looptree}->[vec($analysis,$i,16)]->[1]\n";
             $pad = '  |' x ( $level + 1 ); 
             do {
                 $index = sprintf ( "%+7s", $i+1 );
-                print "$index$pad-- $self->{array}->[$i]\n";
-            } while ( vec ( $self->{analysis}, ++$i, 16 ) == 0xFFFF && $i < $self->{size} );
+                print "$index$pad-- $array[$i]\n";
+            } while ( vec ( $analysis, ++$i, 16 ) == 0xFFFF && $i < $size );
         }
         else {
             $i++;
@@ -411,7 +391,11 @@ $p->reset_pos ();
    the file.
 
 $p->print_tree;
-   prints the transaction file in a tree format.
+   Prints the transaction file in a tree format.
+
+$p->get_segment_seperator () 
+$p->get_element_seperator ()
+   Get the segment seperator, element seperator.
 
 The configuration files provided with this package and the corresponding
 transaction type is mentioned below. These are the X12 HIPAA transactions.
