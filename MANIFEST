@@ -1,8 +1,8 @@
-Cf.pm                        X12::Parser::Cf module
+lib/X12/Parser/Cf.pm         X12::Parser::Cf module
 CHANGES                      changes file
 Makefile.PL                  Makefile
 MANIFEST                     This file
-Parser.pm                    X12::Parser module
+lib/X12/Parser.pm            X12::Parser module
 README                       readme file
 Readme.pod                   X12::Parser::Readme man page
 cf/270_004010X092.cf         cf file

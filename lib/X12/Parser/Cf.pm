@@ -30,7 +30,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 # Preloaded methods go here.
 my $level = 0;
@@ -193,7 +193,7 @@ these files. The user may use them as is at his own risk.
 
 =head1 AUTHOR
 
-Prasad Poruporuthan, E<lt>pprasadb@planet-save.com<gt>
+Prasad Poruporuthan, I<prasad@cpan.org>
 
 =head1 SEE ALSO
 

@@ -1,4 +1,4 @@
-X12::Parser 0.02
+X12::Parser 0.03
 
 1. Fixed problem with parser running out of memory.
    Still has issue with very large files.

@@ -294,7 +294,7 @@ If you have a web site set up for your module, mention it here.
 
 =head1 AUTHOR
 
-Prasad Poruporuthan, E<lt>pprasadb@planet-save.com<gt>
+Prasad Poruporuthan, I<prasad@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 

@@ -31,7 +31,7 @@ our @EXPORT = qw(
     
 );
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 # Preloaded methods go here.
 use X12::Parser::Cf;
@@ -88,7 +88,6 @@ sub _load {
     $/ = substr ($isa, 105, 1);
     $s = substr ($isa, 3, 1);
 
-    my @array;
     seek (FILE, 0, 0);
     my @array = <FILE>;
     close (FILE);
@@ -178,8 +177,8 @@ sub _get_level_one {
 sub _get_next_level {
     my $self = shift;
     my $current_pos  = shift;
-    my $current_level = $self->{cf}->{looptree}->[$current_pos][0];
-    my $next_level = $self->{cf}->{looptree}->[$current_pos + 1][0];
+    my $current_level = $self->{cf}->{looptree}->[$current_pos][0] || 0;
+    my $next_level = $self->{cf}->{looptree}->[$current_pos + 1][0] || 0;
     my @temp = (); 
 
     if ( $current_level < $next_level ) {
@@ -460,7 +459,7 @@ If you have a web site set up for your module, mention it here.
 
 =head1 AUTHOR
 
-Prasad Poruporuthan, E<lt>pprasadb@planet-save.com<gt>
+Prasad Poruporuthan, I<prasad@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
