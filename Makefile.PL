@@ -22,6 +22,7 @@ WriteMakefile(
    'cf/837_004010X096.cf'     => '$(INST_LIBDIR)/Parser/cf/837_004010X096.cf',
    'cf/837_004010X097.cf'     => '$(INST_LIBDIR)/Parser/cf/837_004010X097.cf',
    'cf/837_004010X098.cf'     => '$(INST_LIBDIR)/Parser/cf/837_004010X098.cf',
+   'cf/997.cf'                => '$(INST_LIBDIR)/Parser/cf/997.cf',
    },
    ($] ge '5.005') ? (
     'AUTHOR'    => 'Prasad Poruporuthan (prasad@cpan.org)',

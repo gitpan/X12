@@ -30,7 +30,7 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
     
 );
-our $VERSION = '0.04';
+our $VERSION = '0.08';
 
 # Preloaded methods go here.
 my $level = 0;
@@ -200,13 +200,13 @@ X12::Parser::Cf - Perl module for reading X12 configuration files.
 
 =head1 SYNOPSIS
 
-use X12::Parser::Cf;
+  use X12::Parser::Cf;
 
-#-- create a X12::Parser::Cf object
- my $cf = new X12::Parser::Cf;
+  #-- create a X12::Parser::Cf object
+  my $cf = new X12::Parser::Cf;
 
-#-- read/load a cf file
- $cf->load ('837_004010X098.cf');
+  #-- read/load a cf file
+  $cf->load ('837_004010X098.cf');
 
 =head1 DESCRIPTION
 

@@ -5,14 +5,14 @@
 #use strict;
 use Test;
 
-BEGIN { plan tests => 3 }
+BEGIN { plan tests => 4 }
 
 #########################
 
 use FindBin;
 use X12::Parser;
 
-my ($loop, $pos);
+my ($loop, $pos, $level);
 
 $sample_file = "$FindBin::RealBin/sample_835.txt";
 $sample_cf   = "$FindBin::RealBin/../cf/835_004010X091.cf";
@@ -27,6 +27,8 @@ ok ($loop, 'ISA');
 $loop = $p->get_next_loop;
 ok ($loop, 'GS');
 
-$p->reset_pos;
 ($pos, $loop) = $p->get_next_pos_loop;
-ok  ($pos, 0);
+ok  ($pos, 3);
+
+($pos, $level, $loop) = $p->get_next_pos_level_loop;
+ok  ($level, 1);
