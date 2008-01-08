@@ -8,7 +8,7 @@ package X12::Parser;
 
 #use 5.008;
 use strict;
-#use warnings;
+use warnings;
 
 require Exporter;
 
@@ -31,31 +31,25 @@ our @EXPORT = qw(
     
 );
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 # Preloaded methods go here.
 use X12::Parser::Cf;
 
-my $line_count        = 0;
-my $current_level     = undef;
-my $track_level       = undef;
-my $element_seperator = undef;
-my $segment_seperator = undef;
-
-my $cf       = undef;
-
-my $file_handle = undef;
-my @array_of_handles = ();
-
-my $last_read_segment = undef;
-my $last_read_loop = undef;
-
-
-
 sub new {
     my $self = {
-        file        => undef,
-        conf        => undef,
+        file               => undef,
+        conf               => undef,
+        _LINE_COUNT        => undef,
+        _CURRENT_LEVEL     => undef,
+        _TRACK_LEVEL       => undef,
+        _ELEMENT_SEPERATOR => undef,
+        _SEGMENT_SEPERATOR => undef,
+        _CF                => undef,
+        _FILE_HANDLE       => undef,
+        _LAST_READ_SEGMENT => undef,
+        _LAST_READ_LOOP    => undef,
+        _ARRAY_OF_HANDLES  => undef,
     };
     return bless $self;
 }
@@ -67,14 +61,26 @@ sub parse {
     $self->{file} = $params{file};
     $self->{conf} = $params{conf};
 
-    $cf  = new X12::Parser::Cf;
-    $cf->load ("$self->{conf}") if defined $self->{conf};
+    # initialize in case the parse method is called again
+    $self->{_LINE_COUNT} = 0,  
+    $self->{_CURRENT_LEVEL} = undef,
+    $self->{_TRACK_LEVEL} = undef,
+    $self->{_ELEMENT_SEPERATOR} = undef,
+    $self->{_SEGMENT_SEPERATOR} = undef,
+    $self->{_CF} = undef,      
+    $self->{_FILE_HANDLE} = undef,
+    $self->{_LAST_READ_SEGMENT} = undef,
+    $self->{_LAST_READ_LOOP} = undef,
+    $self->{_ARRAY_OF_HANDLES} = undef,
+        
+    $self->{_CF}  = new X12::Parser::Cf;
+    $self->{_CF}->load ("$self->{conf}") if defined $self->{conf};
     
-    $track_level = 1;
-    my @level_one = $cf->get_level_one;
-    unshift ( @array_of_handles, \@level_one );
+    $self->{_TRACK_LEVEL} = 1;
+    my @level_one = $self->{_CF}->get_level_one;
+    unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@level_one );
 
-    open ($file_handle, "$self->{file}") || die "error: cannot open file $self->{file}\n";
+    open ($self->{_FILE_HANDLE}, "$self->{file}") || die "error: cannot open file $self->{file}\n";
     $self->_set_seperator;
 }
 
@@ -83,26 +89,26 @@ sub _set_seperator {
     my $self = shift;
     my $isa  = undef;
 
-    if ( read($file_handle, $isa, 106) != 106 ) {
-        close ($file_handle);
+    if ( read($self->{_FILE_HANDLE}, $isa, 106) != 106 ) {
+        close ($self->{_FILE_HANDLE});
         die "error: invalid file format $self->{file}\n";
     }
-    seek ($file_handle, -106, 1);
+    seek ($self->{_FILE_HANDLE}, -106, 1);
 
-    $segment_seperator = substr ($isa, 105, 1);
-    $element_seperator = substr ($isa, 3, 1);
+    $self->{_SEGMENT_SEPERATOR} = substr ($isa, 105, 1);
+    $self->{_ELEMENT_SEPERATOR} = substr ($isa, 3, 1);
 }
 
 
 sub get_segment_seperator {
     my $self = shift;
-    return $segment_seperator;
+    return $self->{_SEGMENT_SEPERATOR};
 }
 
 
 sub get_element_seperator {
     my $self = shift;
-    return $element_seperator;
+    return $self->{_ELEMENT_SEPERATOR};
 }
 
 
@@ -110,36 +116,37 @@ sub _parse_loop_start {
     my $self = shift;
     my ($current_loop, $segment, @segment );
 
-    if ( defined $last_read_loop ) {
-            my $temp = $last_read_loop;
-            $last_read_loop = undef;
+    if ( defined $self->{_LAST_READ_LOOP} ) {
+            my $temp = $self->{_LAST_READ_LOOP};
+            $self->{_LAST_READ_LOOP} = undef;
             return $temp;
     }
 
-    while ( $segment = <$file_handle> ) {
+    my $temp_handle = $self->{_FILE_HANDLE};
+    while ( $segment = <$temp_handle> ) {
         chomp($segment);
-        $line_count++;    
-        $last_read_segment = $segment;
-        @segment = split ( /\Q$element_seperator\E/, $segment );
+        $self->{_LINE_COUNT}++;    
+        $self->{_LAST_READ_SEGMENT} = $segment;
+        @segment = split ( /\Q$self->{_ELEMENT_SEPERATOR}\E/, $segment );
 
-        for my $level_handle (@array_of_handles) {
+        for my $level_handle (@{$self->{_ARRAY_OF_HANDLES}}) {
             foreach my $tree_index (@$level_handle) {
-                my $loop = $cf->{looptree}->[$tree_index][1];
-                my @left = split ( /:/, $cf->{segmentstart}->{$loop}->[0] );
+                my $loop = $self->{_CF}->{looptree}->[$tree_index][1];
+                my @left = split ( /:/, $self->{_CF}->{segmentstart}->{$loop}->[0] );
                 if ( $left[0] eq $segment[0] ) {
                     if ( $left[2] eq "" ) {
-                        $current_loop = $cf->{looptree}->[$tree_index][1];
-                        $current_level = $cf->{looptree}->[$tree_index][0];
-                        my $diff = $track_level - $cf->{looptree}->[$tree_index][0];
-                        $track_level = $cf->{looptree}->[$tree_index][0];
+                        $current_loop = $self->{_CF}->{looptree}->[$tree_index][1];
+                        $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
+                        my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
+                        $self->{_TRACK_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
                         while ( $diff > 0 ) {
-                            shift ( @array_of_handles );
+                            shift ( @{$self->{_ARRAY_OF_HANDLES}} );
                             $diff--;
                         }
-                        my @next_level = $cf->get_next_level ( $tree_index );
+                        my @next_level = $self->{_CF}->get_next_level ( $tree_index );
                         if ( 'END' ne $next_level[0] ) {
-                            $track_level++;
-                            unshift ( @array_of_handles, \@next_level );
+                            $self->{_TRACK_LEVEL}++;
+                            unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
                             return $current_loop;
                         }
                         return $current_loop;
@@ -147,18 +154,18 @@ sub _parse_loop_start {
                     else {
                         my @qual = split ( /,/, $left[2] );
                         if (( grep { $_ eq $segment[$left[1]] } @qual )) {
-                            $current_loop = $cf->{looptree}->[$tree_index][1];
-                            $current_level = $cf->{looptree}->[$tree_index][0];
-                            my $diff = $track_level - $cf->{looptree}->[$tree_index][0];
-                            $track_level = $cf->{looptree}->[$tree_index][0];
+                            $current_loop = $self->{_CF}->{looptree}->[$tree_index][1];
+                            $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
+                            my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
+                            $self->{_TRACK_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
                             while ( $diff > 0 ) {
-                                shift ( @array_of_handles );
+                                shift ( @{$self->{_ARRAY_OF_HANDLES}} );
                                 $diff--;
                             }
-                            my @next_level = $cf->get_next_level ( $tree_index );
+                            my @next_level = $self->{_CF}->get_next_level ( $tree_index );
                             if ( 'END' ne $next_level[0] ) {
-                                $track_level++;
-                                unshift ( @array_of_handles, \@next_level );
+                                $self->{_TRACK_LEVEL}++;
+                                unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
                                 return $current_loop;
                             }
                             return $current_loop;
@@ -168,7 +175,7 @@ sub _parse_loop_start {
             }
         }
     }
-    close ($file_handle);
+    close ($self->{_FILE_HANDLE});
     return;
 }
 
@@ -177,35 +184,36 @@ sub _parse_loop {
     my $self = shift;
     my ( $segment, @segment, @loop );
 
-    if ( defined $last_read_segment ) {
-            push (@loop, $last_read_segment);
-            $last_read_segment = undef;
+    if ( defined $self->{_LAST_READ_SEGMENT} ) {
+            push (@loop, $self->{_LAST_READ_SEGMENT});
+            $self->{_LAST_READ_SEGMENT} = undef;
     }
 
-    while ( $segment = <$file_handle> ) {
+    my $temp_handle = $self->{_FILE_HANDLE};
+    while ( $segment = <$temp_handle> ) {
         chomp($segment);
-        $line_count++;    
-        $last_read_segment = $segment;
-        @segment = split ( /\Q$element_seperator\E/, $segment );
+        $self->{_LINE_COUNT}++;    
+        $self->{_LAST_READ_SEGMENT} = $segment;
+        @segment = split ( /\Q$self->{_ELEMENT_SEPERATOR}\E/, $segment );
 
-        for my $level_handle (@array_of_handles) {
+        for my $level_handle (@{$self->{_ARRAY_OF_HANDLES}}) {
             foreach my $tree_index (@$level_handle) {
-                my $loop = $cf->{looptree}->[$tree_index][1];
-                my @left = split ( /:/, $cf->{segmentstart}->{$loop}->[0] );
+                my $loop = $self->{_CF}->{looptree}->[$tree_index][1];
+                my @left = split ( /:/, $self->{_CF}->{segmentstart}->{$loop}->[0] );
                 if ( $left[0] eq $segment[0] ) {
                     if ( $left[2] eq "" ) {
-                        $last_read_loop = $cf->{looptree}->[$tree_index][1];
-                        $current_level = $cf->{looptree}->[$tree_index][0];
-                        my $diff = $track_level - $cf->{looptree}->[$tree_index][0];
-                        $track_level =  $cf->{looptree}->[$tree_index][0];
+                        $self->{_LAST_READ_LOOP} = $self->{_CF}->{looptree}->[$tree_index][1];
+                        $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
+                        my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
+                        $self->{_TRACK_LEVEL} =  $self->{_CF}->{looptree}->[$tree_index][0];
                         while ( $diff > 0 ) {
-                            shift ( @array_of_handles );
+                            shift ( @{$self->{_ARRAY_OF_HANDLES}} );
                             $diff--;
                         }
-                        my @next_level = $cf->get_next_level ( $tree_index );
+                        my @next_level = $self->{_CF}->get_next_level ( $tree_index );
                         if ( 'END' ne $next_level[0] ) {
-                            $track_level++;
-                            unshift ( @array_of_handles, \@next_level );
+                            $self->{_TRACK_LEVEL}++;
+                            unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
                             return @loop;
                         }
                         return @loop;
@@ -213,18 +221,18 @@ sub _parse_loop {
                     else {
                         my @qual = split ( /,/, $left[2] );
                         if (( grep { $_ eq $segment[$left[1]] } @qual )) {
-                            $last_read_loop = $cf->{looptree}->[$tree_index][1];
-                            $current_level = $cf->{looptree}->[$tree_index][0];
-                            my $diff = $track_level - $cf->{looptree}->[$tree_index][0];
-                            $track_level =  $cf->{looptree}->[$tree_index][0];
+                            $self->{_LAST_READ_LOOP} = $self->{_CF}->{looptree}->[$tree_index][1];
+                            $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
+                            my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
+                            $self->{_TRACK_LEVEL} =  $self->{_CF}->{looptree}->[$tree_index][0];
                             while ( $diff > 0 ) {
-                                shift ( @array_of_handles );
+                                shift ( @{$self->{_ARRAY_OF_HANDLES}} );
                                 $diff--;
                             }
-                            my @next_level = $cf->get_next_level ( $tree_index );
+                            my @next_level = $self->{_CF}->get_next_level ( $tree_index );
                             if ( 'END' ne $next_level[0] ) {
-                                $track_level++;
-                                unshift ( @array_of_handles, \@next_level );
+                                $self->{_TRACK_LEVEL}++;
+                                unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
                                 return @loop;
                             }
                             return @loop;;
@@ -245,14 +253,15 @@ sub get_next_loop {
     my $loop = undef;
 
     my $original_line_seperator = $/;
-    $/ = $segment_seperator;
+    $/ = $self->{_SEGMENT_SEPERATOR};
 
     $loop = $self->_parse_loop_start;
 
     $/ = $original_line_seperator;
 
+    if ( ! defined $loop ) { return }
     if ( 'IEA' eq $loop ) {
-        if ( ! eof($file_handle) ) {
+        if ( ! eof($self->{_FILE_HANDLE}) ) {
             $self->_set_seperator;
         }
     }
@@ -265,19 +274,19 @@ sub get_next_pos_loop {
     my $loop = undef;
 
     my $original_line_seperator = $/;
-    $/ = $segment_seperator;
+    $/ = $self->{_SEGMENT_SEPERATOR};
 
     $loop = $self->_parse_loop_start;
 
     $/ = $original_line_seperator;
 
+    if ( ! defined $loop ) { return }
     if ( 'IEA' eq $loop ) {
-        if ( ! eof($file_handle) ) {
+        if ( ! eof($self->{_FILE_HANDLE}) ) {
             $self->_set_seperator;
         }
     }
-    if ( ! defined $loop ) { return }
-    return ($line_count, $loop);
+    return ($self->{_LINE_COUNT}, $loop);
 }
 
 
@@ -286,19 +295,19 @@ sub get_next_pos_level_loop {
     my $loop = undef;
 
     my $original_line_seperator = $/;
-    $/ = $segment_seperator;
+    $/ = $self->{_SEGMENT_SEPERATOR};
 
     $loop = $self->_parse_loop_start;
 
     $/ = $original_line_seperator;
 
+    if ( ! defined $loop ) { return }
     if ( 'IEA' eq $loop ) {
-        if ( ! eof($file_handle) ) {
+        if ( ! eof($self->{_FILE_HANDLE}) ) {
             $self->_set_seperator;
         }
     }
-    if ( ! defined $loop ) { return }
-    return ($line_count, $current_level, $loop);
+    return ($self->{_LINE_COUNT}, $self->{_CURRENT_LEVEL}, $loop);
 }
 
 
@@ -307,7 +316,7 @@ sub get_loop_segments {
     my @loop = ();
 
     my $original_line_seperator = $/;
-    $/ = $segment_seperator;
+    $/ = $self->{_SEGMENT_SEPERATOR};
 
     @loop = $self->_parse_loop;
 

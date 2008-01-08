@@ -1,3 +1,11 @@
+X12::Parser 0.09
+
+1. Package Level variables in both the Parser.pm and Cf.pm module have
+been removed. This would allow a user to call the parse method on multiple
+files using same/different config files.
+
+2. Removed warnings that appeared when a end of the X12 file was reached.
+
 X12::Parser 0.08
 
 A whole lot of changes have gone into this version.

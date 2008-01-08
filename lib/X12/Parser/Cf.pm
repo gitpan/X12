@@ -30,20 +30,19 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
     
 );
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 # Preloaded methods go here.
-my $level = 0;
-my @array = ();
-my @loop  = ();
-
 
 
 #--- Cf::new
 sub new {
     my $self = {
-        looptree        => [],        #ref to an array
-        segmentstart    => {},        #ref to a hash
+        looptree        => undef,        #ref to an array
+        segmentstart    => undef,        #ref to a hash
+        _LEVEL          => undef,
+        _LOOP           => undef,
+        _ARRAY          => undef,
     };
 
     bless($self);
@@ -55,31 +54,32 @@ sub load {
     my ($self, $file) = @_;
 
     open(FILE, "$file") || die "error: cannot open cf file $file\n";
-    @array = <FILE>;
-    chop(@array);
+    @{$self->{_ARRAY}} = <FILE>;
+    chomp(@{$self->{_ARRAY}});
     close(FILE);
 
     $self->_find_LOOPS();
     $self->_parse_loops();
 
-    @array = ();
-    @loop = ();
+    $self->{_ARRAY} = undef;
+    $self->{_ARRAY} = undef;
+    $self->{_LOOP} = undef;
 }
 
 #--- Cf::_find_LOOPS
 #--- local
 sub _find_LOOPS {
     my $self = shift;
-    for (my $i=0; $i<@array; $i++) {
-        if ( $array[$i] eq "[LOOPS]" ) {
+    for (my $i=0; $i<@{$self->{_ARRAY}}; $i++) {
+        if ( $self->{_ARRAY}->[$i] eq "[LOOPS]" ) {
         LABEL_A:
             $i++;
-            if ( $array[$i] =~ /^\n/  || $array[$i] =~ /^#/ ||
-                $array[$i] =~ /^\[/ ) {
+            if ( $self->{_ARRAY}->[$i] =~ /^\n/  || $self->{_ARRAY}->[$i] =~ /^#/ ||
+                $self->{_ARRAY}->[$i] =~ /^\[/ ) {
                 last;
             }
             else {
-                push( @loop, $array[$i]);
+                push( @{$self->{_LOOP}}, $self->{_ARRAY}->[$i]);
                 goto LABEL_A;
             }
         }
@@ -90,11 +90,11 @@ sub _find_LOOPS {
 #--- local
 sub _parse_loops {
     my $self = shift;
-    foreach my $loop (@loop) {
-        $level = 0;
+    foreach my $loop (@{$self->{_LOOP}}) {
+        $self->{_LEVEL} = 0;
         $self->_parse_loop ($loop);
     }
-    foreach my $loop (@loop) {
+    foreach my $loop (@{$self->{_LOOP}}) {
         $self->_parse_segment ($loop);
     }
 }
@@ -105,20 +105,20 @@ sub _parse_loop {
     my $self = shift;
     my $loop = shift;
 
-    $level++;
+    $self->{_LEVEL}++;
 
-    for (my $i=0; $i<@array; $i++) {
-        if ( $array[$i] eq "[$loop]" ) {
-            push ( @{$self->{looptree}}, [ $level, $loop ] );
+    for (my $i=0; $i<@{$self->{_ARRAY}}; $i++) {
+        if ( $self->{_ARRAY}->[$i] eq "[$loop]" ) {
+            push ( @{$self->{looptree}}, [ $self->{_LEVEL}, $loop ] );
             LABEL_C:
             $i++;
-            if ( $array[$i] =~ /^segment=/ ) {
+            if ( $self->{_ARRAY}->[$i] =~ /^segment=/ ) {
                 goto LABEL_C;
             }
-            if ( $array[$i] =~ /^loop=/ ) {
-                my @temp = split ( /=/, $array[$i] );
-                $self->_parse_loop ($temp[1], $level);
-                $level--;
+            if ( $self->{_ARRAY}->[$i] =~ /^loop=/ ) {
+                my @temp = split ( /=/, $self->{_ARRAY}->[$i] );
+                $self->_parse_loop ($temp[1], $self->{_LEVEL});
+                $self->{_LEVEL}--;
                 goto LABEL_C;
             }
             else {
@@ -133,17 +133,17 @@ sub _parse_loop {
 sub _parse_segment {
     my $self = shift;
     my $loop = shift;
-    for (my $i=0; $i<@array; $i++) {
-        if ( $array[$i] eq "[$loop]" ) {
+    for (my $i=0; $i<@{$self->{_ARRAY}}; $i++) {
+        if ( $self->{_ARRAY}->[$i] eq "[$loop]" ) {
             LABEL_B:
             $i++;
-            if ( $array[$i] =~ /^segment=/ ) {
-                my @temp  = split ( /=/, $array[$i] );
+            if ( $self->{_ARRAY}->[$i] =~ /^segment=/ ) {
+                my @temp  = split ( /=/, $self->{_ARRAY}->[$i] );
                 push ( @{$self->{segmentstart}->{$loop}}, $temp[1] );
                 goto LABEL_B;
             }
-            elsif ( $array[$i] =~ /^loop=/ ) {
-                my @temp = split ( /=/, $array[$i] );
+            elsif ( $self->{_ARRAY}->[$i] =~ /^loop=/ ) {
+                my @temp = split ( /=/, $self->{_ARRAY}->[$i] );
                 $self->_parse_segment ($temp[1]);
                 goto LABEL_B;
             }
