@@ -1,212 +1,119 @@
-# Copyright 2003 by Prasad Poruporuthan
+# Copyright 2009 by Prasad Balan
 # All rights reserved.
 #
 # This library is free software; you can redistribute it and/or modify
 # it under the same terms as Perl itself.
- 
 package X12::Parser::Cf;
-
-#use 5.006;
 use strict;
-use warnings;
-
 require Exporter;
-
 our @ISA = qw(Exporter);
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-
 # This allows declaration    use X12::Parser::Cf ':all';
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
-our %EXPORT_TAGS = ( 'all' => [ qw(
-    
-) ] );
-
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-
-our @EXPORT = qw(
-    
+our %EXPORT_TAGS = (
+	'all' => [
+		qw(
+		  )
+	]
 );
-our $VERSION = '0.09';
+our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+our @EXPORT    = qw(
+);
+our $VERSION = '0.50';
 
 # Preloaded methods go here.
+use X12::Parser::Tree;
 
-
-#--- Cf::new
 sub new {
-    my $self = {
-        looptree        => undef,        #ref to an array
-        segmentstart    => undef,        #ref to a hash
-        _LEVEL          => undef,
-        _LOOP           => undef,
-        _ARRAY          => undef,
-    };
-
-    bless($self);
-    return $self;
+	my $self = { _LINES => undef, };
+	return bless $self;
 }
 
-#--- Cf::load
 sub load {
-    my ($self, $file) = @_;
+	my $self   = shift;
+	my %params = @_;
 
-    open(FILE, "$file") || die "error: cannot open cf file $file\n";
-    @{$self->{_ARRAY}} = <FILE>;
-    chomp(@{$self->{_ARRAY}});
-    close(FILE);
+	#open the config file and read it into array
+	open( FILE, $params{file} )
+	  || die "error: cannot open cf file $params{file}\n";
+	@{ $self->{_LINES} } = <FILE>;
+	chomp( @{ $self->{_LINES} } );
+	close(FILE);
 
-    $self->_find_LOOPS();
-    $self->_parse_loops();
+	#create the root tree object
+	my $root = X12::Parser::Tree->new();
+	$root->set_name("X12");
+	my $pos = $self->_get_loop_pos("LOOPS");
 
-    $self->{_ARRAY} = undef;
-    $self->{_ARRAY} = undef;
-    $self->{_LOOP} = undef;
+	#parse the LOOPS section of the config file
+	for ( my $i = $pos ; $i < scalar @{ $self->{_LINES} } ; $i++ ) {
+		if ( $self->{_LINES}->[$i] !~ /^[a-zA-Z0-9]/ ) {
+			last;
+		}
+		else {
+			$self->_parse_loop( $root, $self->{_LINES}->[$i] );
+		}
+	}
+	return $root;
 }
 
-#--- Cf::_find_LOOPS
-#--- local
-sub _find_LOOPS {
-    my $self = shift;
-    for (my $i=0; $i<@{$self->{_ARRAY}}; $i++) {
-        if ( $self->{_ARRAY}->[$i] eq "[LOOPS]" ) {
-        LABEL_A:
-            $i++;
-            if ( $self->{_ARRAY}->[$i] =~ /^\n/  || $self->{_ARRAY}->[$i] =~ /^#/ ||
-                $self->{_ARRAY}->[$i] =~ /^\[/ ) {
-                last;
-            }
-            else {
-                push( @{$self->{_LOOP}}, $self->{_ARRAY}->[$i]);
-                goto LABEL_A;
-            }
-        }
-    }
+#get the position of a loop section e.g. [2300]
+sub _get_loop_pos {
+	my ( $self, $loop ) = @_;
+	for ( my $i = 0 ; $i < @{ $self->{_LINES} } ; $i++ ) {
+		if ( $self->{_LINES}->[$i] =~ /^\[$loop\]/ ) {
+			return $i + 1;
+		}
+	}
+	return undef;
 }
 
-#--- local Cf::_parse_loops
-#--- local
-sub _parse_loops {
-    my $self = shift;
-    foreach my $loop (@{$self->{_LOOP}}) {
-        $self->{_LEVEL} = 0;
-        $self->_parse_loop ($loop);
-    }
-    foreach my $loop (@{$self->{_LOOP}}) {
-        $self->_parse_segment ($loop);
-    }
-}
-
-#--- local Cf::_parse_loop
-#--- local
 sub _parse_loop {
-    my $self = shift;
-    my $loop = shift;
-
-    $self->{_LEVEL}++;
-
-    for (my $i=0; $i<@{$self->{_ARRAY}}; $i++) {
-        if ( $self->{_ARRAY}->[$i] eq "[$loop]" ) {
-            push ( @{$self->{looptree}}, [ $self->{_LEVEL}, $loop ] );
-            LABEL_C:
-            $i++;
-            if ( $self->{_ARRAY}->[$i] =~ /^segment=/ ) {
-                goto LABEL_C;
-            }
-            if ( $self->{_ARRAY}->[$i] =~ /^loop=/ ) {
-                my @temp = split ( /=/, $self->{_ARRAY}->[$i] );
-                $self->_parse_loop ($temp[1], $self->{_LEVEL});
-                $self->{_LEVEL}--;
-                goto LABEL_C;
-            }
-            else {
-                return;
-            }
-        }
-    }
+	my ( $self, $node, $loop ) = @_;
+	my $pos   = $self->_get_loop_pos($loop);
+	my $end   = undef;
+	my $child = X12::Parser::Tree->new();
+	$child->set_name($loop);
+	if ( $self->{_LINES}->[$pos] =~ /^segment=/ ) {
+		$end = substr $self->{_LINES}->[$pos], 8;
+	}
+	$child->set_loop_start_parm( split( /:/, $end ) );
+	$child->set_parent($node);
+	$node->add_child($child);
+	for ( my $i = $pos ; $i < scalar( @{ $self->{_LINES} } ) ; $i++ ) {
+		if ( $self->{_LINES}->[$i] =~ /^segment=/ ) {
+			next;
+		}
+		if ( $self->{_LINES}->[$i] =~ /^loop=/ ) {
+			$end = substr $self->{_LINES}->[$i], 5;
+			$self->_parse_loop( $child, $end );
+		}
+		if ( $self->{_LINES}->[$i] !~ /^[a-zA-Z0-9]/ ) {
+			last;
+		}
+	}
 }
-
-#--- local Cf::_segment
-#--- local
-sub _parse_segment {
-    my $self = shift;
-    my $loop = shift;
-    for (my $i=0; $i<@{$self->{_ARRAY}}; $i++) {
-        if ( $self->{_ARRAY}->[$i] eq "[$loop]" ) {
-            LABEL_B:
-            $i++;
-            if ( $self->{_ARRAY}->[$i] =~ /^segment=/ ) {
-                my @temp  = split ( /=/, $self->{_ARRAY}->[$i] );
-                push ( @{$self->{segmentstart}->{$loop}}, $temp[1] );
-                goto LABEL_B;
-            }
-            elsif ( $self->{_ARRAY}->[$i] =~ /^loop=/ ) {
-                my @temp = split ( /=/, $self->{_ARRAY}->[$i] );
-                $self->_parse_segment ($temp[1]);
-                goto LABEL_B;
-            }
-            else {
-                return;
-            }
-        }
-    }
-}
-
-#--- Cf::get_level_one
-sub get_level_one {
-    my $self = shift;
-    my @temp = ();
-    for ( my $i=0; $i < @{$self->{looptree}}; $i++ ) {
-        if ( $self->{looptree}->[$i][0] == 1 ) {
-            push ( @temp, $i );
-        }
-    }
-    return @temp;
-}
-
-#--- Cf::get_next_level
-sub get_next_level {
-    my $self = shift;
-    my $current_pos  = shift;
-    my $current_level = $self->{looptree}->[$current_pos][0] || 0;
-    my $next_level = $self->{looptree}->[$current_pos + 1][0] || 0;
-    my @temp = ();
-
-    if ( $current_level < $next_level ) {
-        $current_pos++;
-        while ( $self->{looptree}->[$current_pos][0] > $current_level ) {
-            if ( $self->{looptree}->[$current_pos][0] == $next_level ) {
-                push ( @temp, $current_pos );
-            }
-            $current_pos++;
-        }
-    }
-    else {
-        push ( @temp , 'END' );
-    }
-    return @temp;
-}
-
-
 1;
 __END__
 # Below is stub documentation for your module. You better edit it!
 
 =head1 NAME
 
-X12::Parser::Cf - Perl module for reading X12 configuration files. 
+X12::Parser::Cf - Perl module for reading X12 configuration files.
 
 =head1 SYNOPSIS
 
   use X12::Parser::Cf;
 
-  #-- create a X12::Parser::Cf object
+  # Create a X12::Parser::Cf object
   my $cf = new X12::Parser::Cf;
 
-  #-- read/load a cf file
-  $cf->load ('837_004010X098.cf');
+  # Read/load a cf file
+  $cf->load ( file => '837_004010X098.cf' );
 
 =head1 DESCRIPTION
 
@@ -226,15 +133,15 @@ these files. The user may use them as is at his own risk.
 
 =head1 AUTHOR
 
-Prasad Poruporuthan, I<prasad@cpan.org>
+Prasad Balan, I<prasad@cpan.org>
 
 =head1 SEE ALSO
 
-I<X12::Parser>, I<X12::Parser::Readme>
+I<X12::Parser>, I<X12::Parser::Readme>, I<X12::Parser::Tree> 
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2003 by Prasad Poruporuthan
+Copyright 2009 by Prasad Balan
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

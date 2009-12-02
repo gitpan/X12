@@ -1,9 +1,10 @@
 lib/X12/Parser/Cf.pm         X12::Parser::Cf module
+lib/X12/Parser/Tree.pm       X12::Parser::Tree module
 CHANGES                      changes file
 Makefile.PL                  Makefile
 MANIFEST                     This file
 lib/X12/Parser.pm            X12::Parser module
-README                       readme file
+README                       Readme file
 Readme.pod                   X12::Parser::Readme man page
 cf/270_004010X092.cf         cf file
 cf/271_004010X092.cf         cf file
@@ -19,4 +20,6 @@ cf/837_004010X097.cf         cf file
 cf/837_004010X098.cf         cf file
 cf/997.cf                    cf file
 t/1.t                        test file
+t/2.t                        test file
+t/3.t                        test file
 t/sample_835.txt             data for test file

@@ -36,7 +36,7 @@ transaction has its own hierarchy of loops and start/end indicators.
 
 This lead to the development of the X12 configuration file (I<cf>)
 specification. The cf specification is created to specify details
-regarding the blocks/loops and start/end information in a common
+regarding the blocks/loops and start/end information in a simple
 format. Cf files can be created for the different transaction sets.
 (see section I<Building a cf file>). 
 
@@ -48,15 +48,14 @@ transaction type.
 =head2 Cf file specification for X12::Parser
 
 The cf file specifies any transaction in a hierarchical form. It
-identifies the loops and segments in a transaction. This
-information is used to parse the transaction file. The X12::Parser
-uses the X12::Parser::Cf module to read the cf file information before
-parsing a transaction file. Since the X12::Parser parses files based
-on the cf file it allows the user to parse different X12 transaction
-types just by using the appropriate cf file. The user can use the cf
-files that are bundled with this package or create new cf files. The
-cf provided with this package is for the HIPAA X12 Ver 4010
-X12 transactions.
+identifies the loops and segments in a transaction. This information 
+is used to parse the transaction file. The X12::Parser uses the 
+X12::Parser::Cf module to read the cf file information before parsing 
+a transaction file. Since the X12::Parser parses files based on the cf 
+file it allows the user to parse different X12 transaction types just 
+by using the appropriate cf file. The user can use the cf files that 
+are bundled with this package or create new cf files. The cf provided 
+with this package is for the HIPAA X12 Ver 4010 X12 transactions.
 
 A cf file has two types of information: I<section> and I<key=value>
 pairs. A section contains information in key=value pairs.
@@ -136,16 +135,10 @@ something like
 
  my $cf = new X12::Parser::Cf;
  $cf->load("sample.cf");
+ $cf->print_tree;
 
- for (my $i=0; $i<@{$cf->{'looptree'}}; $i++) {
-   print "$cf->{'looptree'}->[$i][0]\t";          #- loop level
-   print "$cf->{'looptree'}->[$i][1]\t";          #- loop name
-   print "$cf->{'segmentstart'}->{$loop}->[0]\n"; #- loop start
- }
-
-This would print a list of loop levels, loop names and loop start segment 
-information. If this doesn't look like what you wanted, go back and fix 
-your cf file.
+This would print the loop hierarchy. You can validate this to ensure
+you have the correct structure.  
 
 =head2 Building a cf file
 
@@ -286,6 +279,8 @@ Implementation guides are available for all the Transaction sets.
 o I<X12::Parser::Readme> for more information on the Parser and
   configuration files.
 
+o I<X12::Parser::Tree>
+
 o I<X12::Parser::Cf>
 
 If you have a mailing list set up for your module, mention it here.
@@ -294,11 +289,11 @@ If you have a web site set up for your module, mention it here.
 
 =head1 AUTHOR
 
-Prasad Poruporuthan, I<prasad@cpan.org>
+Prasad Balan, I<prasad@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2003 by Prasad Poruporuthan
+Copyright 2009 by Prasad Balan
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

@@ -1,13 +1,41 @@
-X12::Parser 0.09
 
+X12::Parser 0.50
+-------------------------------------------------------------------------------
+1. Many improvements (almost a rewrite) have gone into this version. 
+Most of the interfaces have been kept the same except some spell corrections.
+
+2. New class X12::Parser::Tree has been added. Earlier the X12::Parser::Cf
+class was used to read the cf file as well as maintain the information in
+object form. Now they are separated out. X12::Parser::Tree simplifies the
+representation of cf file in object format and is a much cleanser approach.
+
+3. X12::Parser::Cf has been rewritten. Old goto statements are gone.
+
+4. X12::Parser module is rewritten. As a result of X12::Parser::Tree, the
+X12::Parser module is now much more readable and uses a cleaner approach.
+It can handle segment separators of the for ~, ~LF, ~CRLF. 
+
+5. New method get_subelement_separator() is added.
+
+6. Spelling correction from seperator to separator is done.
+
+7. Additional test files for the new modules.
+
+8. Added new method parse_file, replacement to parse. The parse()
+method in the future will be used for file handles.
+
+
+X12::Parser 0.09
+-------------------------------------------------------------------------------
 1. Package Level variables in both the Parser.pm and Cf.pm module have
 been removed. This would allow a user to call the parse method on multiple
 files using same/different config files.
 
 2. Removed warnings that appeared when a end of the X12 file was reached.
 
-X12::Parser 0.08
 
+X12::Parser 0.08
+-------------------------------------------------------------------------------
 A whole lot of changes have gone into this version.
 The X12::Parser can now handle files of any size. The earlier versions
 of the parser relied on reading the whole X12 file into an array before
@@ -40,9 +68,8 @@ we parse the file serially there is no need for this function.
 starting with 1. In previous versions 0 would correspond to the first segment.
 
 
-
 X12::Parser 0.04
-
+-------------------------------------------------------------------------------
 1. Moved _get_level_one and _get_next_level functions from
 Parser.pm to Cf.pm (the new functions in Cf.pm are called
 get_level_one and get_next_level). This keeps configuration
@@ -58,10 +85,12 @@ $orig_line_seperator
    
 
 X12::Parser 0.03
-
+-------------------------------------------------------------------------------
 1. Fixed problem with parser running out of memory.
 Still has issue with very large files.
 
 
-X12::Parser 0.01 - initital release
+X12::Parser 0.01 - initial release
+-------------------------------------------------------------------------------
+1. First release
 

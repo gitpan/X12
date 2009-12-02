@@ -1,350 +1,243 @@
-# Copyright 2003 by Prasad Poruporuthan
+# Copyright 2009 by Prasad Balan
 # All rights reserved.
-# 
+#
 # This library is free software; you can redistribute it and/or modify
 # it under the same terms as Perl itself.
-
 package X12::Parser;
-
-#use 5.008;
 use strict;
-use warnings;
-
 require Exporter;
-
 our @ISA = qw(Exporter);
 
 # Items to export into callers namespace by default. Note: do not export
 # names by default without a very good reason. Use EXPORT_OK instead.
 # Do not simply export all your public functions/methods/constants.
-
 # This allows declaration    use X12 ':all';
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
-our %EXPORT_TAGS = ( 'all' => [ qw(
-    
-) ] );
-
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-
-our @EXPORT = qw(
-    
+our %EXPORT_TAGS = (
+	'all' => [
+		qw(
+		  )
+	]
 );
-
-our $VERSION = '0.09';
+our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+our @EXPORT    = qw(
+);
+our $VERSION = '0.50';
 
 # Preloaded methods go here.
+use X12::Parser::Tree;
 use X12::Parser::Cf;
 
+#constructor.
 sub new {
-    my $self = {
-        file               => undef,
-        conf               => undef,
-        _LINE_COUNT        => undef,
-        _CURRENT_LEVEL     => undef,
-        _TRACK_LEVEL       => undef,
-        _ELEMENT_SEPERATOR => undef,
-        _SEGMENT_SEPERATOR => undef,
-        _CF                => undef,
-        _FILE_HANDLE       => undef,
-        _LAST_READ_SEGMENT => undef,
-        _LAST_READ_LOOP    => undef,
-        _ARRAY_OF_HANDLES  => undef,
-    };
-    return bless $self;
+	my $self = {
+		file                  => undef,
+		conf                  => undef,
+		_TREE_ROOT            => undef,
+		_TREE_POS             => undef,
+		_FILE_HANDLE          => undef,
+		_SEGMENT_SEPARATOR    => undef,
+		_ELEMENT_SEPARATOR    => undef,
+		_SUBELEMENT_SEPARATOR => undef,
+		_NEXT_LOOP            => undef,
+		_NEXT_SEGMENT         => undef,
+	};
+	return bless $self;
 }
 
-
+#public method, takes the X12 and Cf file name as input.
+#loads the config file and sets the separators.
 sub parse {
-    my $self = shift;
-    my %params = @_;
-    $self->{file} = $params{file};
-    $self->{conf} = $params{conf};
-
-    # initialize in case the parse method is called again
-    $self->{_LINE_COUNT} = 0,  
-    $self->{_CURRENT_LEVEL} = undef,
-    $self->{_TRACK_LEVEL} = undef,
-    $self->{_ELEMENT_SEPERATOR} = undef,
-    $self->{_SEGMENT_SEPERATOR} = undef,
-    $self->{_CF} = undef,      
-    $self->{_FILE_HANDLE} = undef,
-    $self->{_LAST_READ_SEGMENT} = undef,
-    $self->{_LAST_READ_LOOP} = undef,
-    $self->{_ARRAY_OF_HANDLES} = undef,
-        
-    $self->{_CF}  = new X12::Parser::Cf;
-    $self->{_CF}->load ("$self->{conf}") if defined $self->{conf};
-    
-    $self->{_TRACK_LEVEL} = 1;
-    my @level_one = $self->{_CF}->get_level_one;
-    unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@level_one );
-
-    open ($self->{_FILE_HANDLE}, "$self->{file}") || die "error: cannot open file $self->{file}\n";
-    $self->_set_seperator;
+	my $self = shift;
+	$self->parse_file(@_);
 }
 
+#public method, takes the X12 and Cf file name as input.
+#loads the config file and sets the separators.
+sub parse_file {
+	my $self   = shift;
+	my %params = @_;
+	$self->{file} = $params{file};
+	$self->{conf} = $params{conf};
 
-sub _set_seperator {
-    my $self = shift;
-    my $isa  = undef;
+	#read the config file to create the TREE object
+	my $cf = X12::Parser::Cf->new();
+	$self->{_TREE_ROOT} = $cf->load( file => "$self->{conf}" )
+	  if defined $self->{conf};
+	$self->{_TREE_POS} = $self->{_TREE_ROOT};
+	if ( defined $self->{_FILE_HANDLE} ) {
+		close( $self->{_FILE_HANDLE} );
+	}
+	open( $self->{_FILE_HANDLE}, "$self->{file}" )
+	  || die "error: cannot open file $self->{file}\n";
 
-    if ( read($self->{_FILE_HANDLE}, $isa, 106) != 106 ) {
-        close ($self->{_FILE_HANDLE});
-        die "error: invalid file format $self->{file}\n";
-    }
-    seek ($self->{_FILE_HANDLE}, -106, 1);
-
-    $self->{_SEGMENT_SEPERATOR} = substr ($isa, 105, 1);
-    $self->{_ELEMENT_SEPERATOR} = substr ($isa, 3, 1);
+	#set the separators
+	$self->_set_separator;
 }
 
-
-sub get_segment_seperator {
-    my $self = shift;
-    return $self->{_SEGMENT_SEPERATOR};
+#private method. sets the separators.
+sub _set_separator {
+	my $self = shift;
+	my $isa  = undef;
+	if ( read( $self->{_FILE_HANDLE}, $isa, 108 ) != 108 ) {
+		close( $self->{_FILE_HANDLE} );
+		die "error: invalid file format $self->{file}\n";
+	}
+	my $terminator = substr( $isa, 106, 2 );
+	if ( $terminator =~ /\r\n/ ) {
+		$self->{_SEGMENT_SEPARATOR} = substr( $isa, 105, 3 );
+	}
+	elsif ( $terminator =~ /^\n/ ) {
+		$self->{_SEGMENT_SEPARATOR} = substr( $isa, 105, 2 );
+	}
+	else {
+		$self->{_SEGMENT_SEPARATOR} = substr( $isa, 105, 1 );
+	}
+	$self->{_ELEMENT_SEPARATOR}    = substr( $isa, 3,   1 );
+	$self->{_SUBELEMENT_SEPARATOR} = substr( $isa, 104, 1 );
+	seek( $self->{_FILE_HANDLE}, -108, 1 );
 }
 
-
-sub get_element_seperator {
-    my $self = shift;
-    return $self->{_ELEMENT_SEPERATOR};
-}
-
-
-sub _parse_loop_start {
-    my $self = shift;
-    my ($current_loop, $segment, @segment );
-
-    if ( defined $self->{_LAST_READ_LOOP} ) {
-            my $temp = $self->{_LAST_READ_LOOP};
-            $self->{_LAST_READ_LOOP} = undef;
-            return $temp;
-    }
-
-    my $temp_handle = $self->{_FILE_HANDLE};
-    while ( $segment = <$temp_handle> ) {
-        chomp($segment);
-        $self->{_LINE_COUNT}++;    
-        $self->{_LAST_READ_SEGMENT} = $segment;
-        @segment = split ( /\Q$self->{_ELEMENT_SEPERATOR}\E/, $segment );
-
-        for my $level_handle (@{$self->{_ARRAY_OF_HANDLES}}) {
-            foreach my $tree_index (@$level_handle) {
-                my $loop = $self->{_CF}->{looptree}->[$tree_index][1];
-                my @left = split ( /:/, $self->{_CF}->{segmentstart}->{$loop}->[0] );
-                if ( $left[0] eq $segment[0] ) {
-                    if ( $left[2] eq "" ) {
-                        $current_loop = $self->{_CF}->{looptree}->[$tree_index][1];
-                        $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
-                        my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
-                        $self->{_TRACK_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
-                        while ( $diff > 0 ) {
-                            shift ( @{$self->{_ARRAY_OF_HANDLES}} );
-                            $diff--;
-                        }
-                        my @next_level = $self->{_CF}->get_next_level ( $tree_index );
-                        if ( 'END' ne $next_level[0] ) {
-                            $self->{_TRACK_LEVEL}++;
-                            unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
-                            return $current_loop;
-                        }
-                        return $current_loop;
-                    }
-                    else {
-                        my @qual = split ( /,/, $left[2] );
-                        if (( grep { $_ eq $segment[$left[1]] } @qual )) {
-                            $current_loop = $self->{_CF}->{looptree}->[$tree_index][1];
-                            $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
-                            my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
-                            $self->{_TRACK_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
-                            while ( $diff > 0 ) {
-                                shift ( @{$self->{_ARRAY_OF_HANDLES}} );
-                                $diff--;
-                            }
-                            my @next_level = $self->{_CF}->get_next_level ( $tree_index );
-                            if ( 'END' ne $next_level[0] ) {
-                                $self->{_TRACK_LEVEL}++;
-                                unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
-                                return $current_loop;
-                            }
-                            return $current_loop;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    close ($self->{_FILE_HANDLE});
-    return;
-}
-
-
-sub _parse_loop {
-    my $self = shift;
-    my ( $segment, @segment, @loop );
-
-    if ( defined $self->{_LAST_READ_SEGMENT} ) {
-            push (@loop, $self->{_LAST_READ_SEGMENT});
-            $self->{_LAST_READ_SEGMENT} = undef;
-    }
-
-    my $temp_handle = $self->{_FILE_HANDLE};
-    while ( $segment = <$temp_handle> ) {
-        chomp($segment);
-        $self->{_LINE_COUNT}++;    
-        $self->{_LAST_READ_SEGMENT} = $segment;
-        @segment = split ( /\Q$self->{_ELEMENT_SEPERATOR}\E/, $segment );
-
-        for my $level_handle (@{$self->{_ARRAY_OF_HANDLES}}) {
-            foreach my $tree_index (@$level_handle) {
-                my $loop = $self->{_CF}->{looptree}->[$tree_index][1];
-                my @left = split ( /:/, $self->{_CF}->{segmentstart}->{$loop}->[0] );
-                if ( $left[0] eq $segment[0] ) {
-                    if ( $left[2] eq "" ) {
-                        $self->{_LAST_READ_LOOP} = $self->{_CF}->{looptree}->[$tree_index][1];
-                        $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
-                        my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
-                        $self->{_TRACK_LEVEL} =  $self->{_CF}->{looptree}->[$tree_index][0];
-                        while ( $diff > 0 ) {
-                            shift ( @{$self->{_ARRAY_OF_HANDLES}} );
-                            $diff--;
-                        }
-                        my @next_level = $self->{_CF}->get_next_level ( $tree_index );
-                        if ( 'END' ne $next_level[0] ) {
-                            $self->{_TRACK_LEVEL}++;
-                            unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
-                            return @loop;
-                        }
-                        return @loop;
-                    }
-                    else {
-                        my @qual = split ( /,/, $left[2] );
-                        if (( grep { $_ eq $segment[$left[1]] } @qual )) {
-                            $self->{_LAST_READ_LOOP} = $self->{_CF}->{looptree}->[$tree_index][1];
-                            $self->{_CURRENT_LEVEL} = $self->{_CF}->{looptree}->[$tree_index][0];
-                            my $diff = $self->{_TRACK_LEVEL} - $self->{_CF}->{looptree}->[$tree_index][0];
-                            $self->{_TRACK_LEVEL} =  $self->{_CF}->{looptree}->[$tree_index][0];
-                            while ( $diff > 0 ) {
-                                shift ( @{$self->{_ARRAY_OF_HANDLES}} );
-                                $diff--;
-                            }
-                            my @next_level = $self->{_CF}->get_next_level ( $tree_index );
-                            if ( 'END' ne $next_level[0] ) {
-                                $self->{_TRACK_LEVEL}++;
-                                unshift ( @{$self->{_ARRAY_OF_HANDLES}}, \@next_level );
-                                return @loop;
-                            }
-                            return @loop;;
-                        }
-                    }
-                }
-            }
-        }
-        push (@loop, $segment);
-    }
-    return @loop;
-}
-
-
-
+#public method. gets the next loop.
 sub get_next_loop {
-    my $self = shift;
-    my $loop = undef;
-
-    my $original_line_seperator = $/;
-    $/ = $self->{_SEGMENT_SEPERATOR};
-
-    $loop = $self->_parse_loop_start;
-
-    $/ = $original_line_seperator;
-
-    if ( ! defined $loop ) { return }
-    if ( 'IEA' eq $loop ) {
-        if ( ! eof($self->{_FILE_HANDLE}) ) {
-            $self->_set_seperator;
-        }
-    }
-    return $loop;
+	my $self = shift;
+	if ( defined $self->{_NEXT_LOOP} ) {
+		my $loop = $self->{_NEXT_LOOP};
+		$self->{_NEXT_LOOP} = undef;
+		return $loop;
+	}
+	else {
+		return $self->_get_next_loop();
+	}
 }
-
 
 sub get_next_pos_loop {
-    my $self = shift;
-    my $loop = undef;
-
-    my $original_line_seperator = $/;
-    $/ = $self->{_SEGMENT_SEPERATOR};
-
-    $loop = $self->_parse_loop_start;
-
-    $/ = $original_line_seperator;
-
-    if ( ! defined $loop ) { return }
-    if ( 'IEA' eq $loop ) {
-        if ( ! eof($self->{_FILE_HANDLE}) ) {
-            $self->_set_seperator;
-        }
-    }
-    return ($self->{_LINE_COUNT}, $loop);
+	my $self = shift;
+	my $loop = undef;
+	if ( defined $self->{_NEXT_LOOP} ) {
+		$loop = $self->{_NEXT_LOOP};
+		$self->{_NEXT_LOOP} = undef;
+		return ( $., $loop );
+	}
+	else {
+		$loop = $self->_get_next_loop();
+		return ( $., $loop );
+	}
 }
-
 
 sub get_next_pos_level_loop {
-    my $self = shift;
-    my $loop = undef;
-
-    my $original_line_seperator = $/;
-    $/ = $self->{_SEGMENT_SEPERATOR};
-
-    $loop = $self->_parse_loop_start;
-
-    $/ = $original_line_seperator;
-
-    if ( ! defined $loop ) { return }
-    if ( 'IEA' eq $loop ) {
-        if ( ! eof($self->{_FILE_HANDLE}) ) {
-            $self->_set_seperator;
-        }
-    }
-    return ($self->{_LINE_COUNT}, $self->{_CURRENT_LEVEL}, $loop);
+	my $self = shift;
+	my $loop = undef;
+	if ( defined $self->{_NEXT_LOOP} ) {
+		$loop = $self->{_NEXT_LOOP};
+		$self->{_NEXT_LOOP} = undef;
+		return ( $., $self->{_TREE_POS}->get_depth(), $loop );
+	}
+	else {
+		$loop = $self->_get_next_loop();
+		return ( $., $self->{_TREE_POS}->get_depth(), $loop );
+	}
 }
 
+#private method. does the hard lifting.
+sub _get_next_loop {
+	my $self = shift;
+	my ( $segment, $file_handle, $node, $loop, @element );
+	local $/;
+	$/             = $self->{_SEGMENT_SEPARATOR};
+	$file_handle   = $self->{_FILE_HANDLE};
+	$node          = $self->{_TREE_POS};
+	$self->{_LOOP} = [];
+	if ( defined $self->{_LAST_SEGMENT} ) {
+		push( @{ $self->{_LOOP} }, $self->{_LAST_SEGMENT} );
+		$self->{_LAST_SEGMENT} = undef;
+	}
+	while ( $segment = <$file_handle> ) {
+		chomp($segment);
+		@element = split( /\Q$self->{_ELEMENT_SEPARATOR}\E/, $segment );
+		$loop = $self->_check_child_match( $node, \@element );
+		if ( defined $loop ) {
+			$self->{_LAST_SEGMENT} = $segment;
+			return $loop;
+		}
+		$loop = $self->_check_parent_match( $node, \@element );
+		if ( defined $loop ) {
+			$self->{_LAST_SEGMENT} = $segment;
+			return $loop;
+		}
+		push( @{ $self->{_LOOP} }, $segment );
+	}
+	close($file_handle);
+	return undef;
+}
 
+#private method. check if any of the child loops match
+sub _check_child_match {
+	my ( $self, $node, $elements ) = @_;
+	for ( my $i = 0 ; $i < $node->get_child_count() ; $i++ ) {
+		my $child = $node->get_child($i);
+		if ( $child->is_loop_start($elements) ) {
+			$self->{_TREE_POS} = $child;
+			return $child->get_name();
+		}
+	}
+	return undef;
+}
+
+#private method. check if any of the parent loops match
+sub _check_parent_match {
+	my ( $self, $node, $elements ) = @_;
+	my $parent = $node->get_parent();
+	if ( !defined $parent ) { return undef; }
+	for ( my $i = 0 ; $i < $parent->get_child_count() ; $i++ ) {
+		my $child = $parent->get_child($i);
+		if ( $child->is_loop_start($elements) ) {
+			$self->{_TREE_POS} = $child;
+			return $child->get_name();
+		}
+	}
+	$self->_check_parent_match( $parent, $elements );
+}
+
+#get the segments in the loop
 sub get_loop_segments {
-    my $self = shift;
-    my @loop = ();
-
-    my $original_line_seperator = $/;
-    $/ = $self->{_SEGMENT_SEPERATOR};
-
-    @loop = $self->_parse_loop;
-
-    $/ = $original_line_seperator;
-
-    return @loop;
+	my $self = shift;
+	my $loop = $self->_get_next_loop();
+	$self->{_NEXT_LOOP} = $loop;
+	return @{ $self->{_LOOP} };
 }
 
+sub get_segment_separator {
+	my $self = shift;
+	return $self->{_SEGMENT_SEPARATOR};
+}
+
+sub get_element_separator {
+	my $self = shift;
+	return $self->{_ELEMENT_SEPARATOR};
+}
+
+sub get_subelement_separator {
+	my $self = shift;
+	return $self->{_SUBELEMENT_SEPARATOR};
+}
 
 sub print_tree {
-    my $self  = shift;
-    my ($pad, $index, $segment);
-
-    while ( my ($pos, $level, $loop) = $self->get_next_pos_level_loop ) {
-        if ( $level != 0 ) {
-            $pad = '  |' x $level; 
-            print "       $pad--$loop\n";
-            $pad = '  |' x ( $level + 1 ); 
-            my @loop = $self->get_loop_segments;
-            foreach $segment (@loop) {
-                $index = sprintf ( "%+7s", $pos++ );
-                print "$index$pad-- $segment\n";
-            }
-        }
-    }
+	my $self = shift;
+	my ( $pad, $index, $segment );
+	my $pos = $. + 1;
+	while ( my $loop = $self->get_next_loop ) {
+		$pad = '  |' x $self->{_TREE_POS}->get_depth();
+		print "       $pad--$loop\n";
+		$pad = '  |' x ( $self->{_TREE_POS}->get_depth() + 1 );
+		my @loop = $self->get_loop_segments;
+		foreach $segment (@loop) {
+			$index = sprintf( "%+7s", $pos++ );
+			print "$index$pad-- $segment\n";
+		}
+	}
 }
-
-
 1;
 __END__
 # Below is stub documentation for your module. You'd better edit it!
@@ -361,7 +254,7 @@ X12::Parser - Perl module for parsing X12 Transaction files
   my $p = new X12::Parser;
 
   # Parse a file with the transaction specific configuration file
-  $p->parse ( file => '837.txt',
+  $p->parse_file ( file => '837.txt',
               conf => 'X12-837P.cf' 
             );
 
@@ -402,6 +295,7 @@ $p = new X12::Parser;
    arguments. It only initializes the members variables required
    for parsing the transaction file.
 
+$p->parse_file(file => '837.txt', conf => 'X12-837P.cf'); (*recommended)
 $p->parse(file => '837.txt', conf => 'X12-837P.cf');
    This method takes two arguments. The first argument is the 
    transaction file that needs to be parsed. The second argument 
@@ -439,12 +333,15 @@ $p->get_next_pos_level_loop;
 $p->print_tree;
    Prints the transaction file in a tree format.
 
-$p->get_segment_seperator;
-   Get the segment seperator.
+$p->get_segment_separator;
+   Get the segment separator.
 
-$p->get_element_seperator;
-   Get the element seperator.
+$p->get_element_separator;
+   Get the element separator.
 
+$p->get_subelement_separator;
+   Get the sub-element separator.
+   
 The configuration files provided with this package and the corresponding
 transaction type is mentioned below. These are the X12 HIPAA transactions.
 
@@ -491,11 +388,11 @@ If you have a web site set up for your module, mention it here.
 
 =head1 AUTHOR
 
-Prasad Poruporuthan, I<prasad@cpan.org>
+Prasad Balan, I<prasad@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2003 by Prasad Poruporuthan
+Copyright 2009 by Prasad Balan
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself. 

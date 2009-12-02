@@ -1,50 +1,66 @@
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl 1.t'
-
 #########################
-#use strict;
+use strict;
 use Test;
-
-BEGIN { plan tests => 8 }
-
+BEGIN { plan tests => 12 }
 #########################
-
 use FindBin;
-use X12::Parser;
+use X12::Parser::Cf;
 
-my ($loop, $pos, $level);
+#setup
+my $sample_cf = "$FindBin::RealBin/../cf/837_004010X098.cf";
+my $cf        = X12::Parser::Cf->new();
+my $root      = $cf->load( file => $sample_cf );
+my ( $svalue, $ivalue, $node, $array );
 
-$sample_file = "$FindBin::RealBin/sample_835.txt";
-$sample_cf   = "$FindBin::RealBin/../cf/835_004010X091.cf";
+#test
+$ivalue = $root->get_child_count;
+ok( $ivalue, 11 );
 
-my $p = new X12::Parser;
+#test
+$svalue = $root->get_name;
+ok( $svalue, 'X12' );
 
-$p->parse ( file => "$sample_file", conf => "$sample_cf" );
+#test
+$node   = $root->get_child(7);
+$svalue = $node->get_name;
+ok( $svalue, '2000C' );
 
-$loop = $p->get_next_loop;
-ok ($loop, 'ISA');
+#test
+$ivalue = $node->get_child_count;
+ok( $ivalue, 2 );
 
-$loop = $p->get_next_loop;
-ok ($loop, 'GS');
+#test
+$svalue = $node->{_SEG};
+ok( $svalue, 'HL' );
 
-($pos, $loop) = $p->get_next_pos_loop;
-ok  ($pos, 3);
+#test
+$ivalue = $node->{_SEG_QUAL_POS};
+ok( $ivalue, 3 );
 
-($pos, $level, $loop) = $p->get_next_pos_level_loop;
-ok  ($level, 1);
+#test
+$array = $node->{_SEG_QUAL};
+ok( @{$array}[0], '23' );
 
-# parse the file again
+#test
+$node   = $node->get_child(1);
+$svalue = $node->get_name;
+ok( $svalue, '2300' );
 
-$p->parse ( file => "$sample_file", conf => "$sample_cf" );
+#test
+$ivalue = $node->get_child_count;
+ok( $ivalue, 8 );
 
-$loop = $p->get_next_loop;
-ok ($loop, 'ISA');
+#test
+$node   = $node->get_child(7);
+$svalue = $node->get_name;
+ok( $svalue, '2400' );
 
-$loop = $p->get_next_loop;
-ok ($loop, 'GS');
+#test
+$ivalue = $node->get_child_count;
+ok( $ivalue, 9 );
 
-($pos, $loop) = $p->get_next_pos_loop;
-ok  ($pos, 3);
-
-($pos, $level, $loop) = $p->get_next_pos_level_loop;
-ok  ($level, 1);
+#test
+$ivalue = $node->get_depth;
+ok( $ivalue, 3 );

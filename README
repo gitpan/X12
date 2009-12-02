@@ -1,4 +1,4 @@
-X12 version 0.09
+X12 version 0.50
 ================
 
 X12::Parser - Perl module for parsing X12 data/transaction files
@@ -16,11 +16,12 @@ DEPENDENCIES
 
 This module requires these other modules and libraries:
 
-	X12::Parser::Cf included is included in this package.	
+	X12::Parser::Cf included is included in this package.
+	X12::Parser::Tree included is included in this package.	
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2003 Prasad Poruporuthan.
+Copyright (C) 2009 Prasad Balan
 All rights reserved.
 
 This library is free software; you can redistribute it and/or modify
