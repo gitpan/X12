@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT    = qw(
 );
-our $VERSION = '0.50';
+our $VERSION = '0.60';
 
 # Preloaded methods go here.
 use X12::Parser::Tree;
@@ -46,34 +46,49 @@ sub new {
 	return bless $self;
 }
 
-#public method, takes the X12 and Cf file name as input.
+#public method, takes the X12 handle and Cf file name as input.
 #loads the config file and sets the separators.
 sub parse {
-	my $self = shift;
-	$self->parse_file(@_);
-}
-
-#public method, takes the X12 and Cf file name as input.
-#loads the config file and sets the separators.
-sub parse_file {
 	my $self   = shift;
 	my %params = @_;
-	$self->{file} = $params{file};
-	$self->{conf} = $params{conf};
+	$self->{handle}       = $params{handle};
+	$self->{conf}         = $params{conf};
+	$self->{_FILE_HANDLE} = $params{handle};
 
 	#read the config file to create the TREE object
 	my $cf = X12::Parser::Cf->new();
 	$self->{_TREE_ROOT} = $cf->load( file => "$self->{conf}" )
 	  if defined $self->{conf};
 	$self->{_TREE_POS} = $self->{_TREE_ROOT};
-	if ( defined $self->{_FILE_HANDLE} ) {
-		close( $self->{_FILE_HANDLE} );
-	}
-	open( $self->{_FILE_HANDLE}, "$self->{file}" )
-	  || die "error: cannot open file $self->{file}\n";
 
 	#set the separators
 	$self->_set_separator;
+}
+
+#public method, takes the X12 and Cf file name as input.
+#loads the config file and sets the separators.
+sub parsefile {
+	my $self   = shift;
+	my %params = @_;
+	$self->{file} = $params{file};
+	$self->{conf} = $params{conf};
+
+	#chose the handle just in case this method is being called the second time
+	#without closing the file
+	if ( defined $self->{_FILE_HANDLE} ) {
+		close( $self->{_FILE_HANDLE} );
+	}
+	open( my $handle, "$self->{file}" )
+	  || die "error: cannot open file $self->{file}\n";
+	$self->parse( handle => $handle, conf => $self->{conf} );
+}
+
+#close the file
+sub closefile {
+	my $self = shift;
+	if ( defined $self->{_FILE_HANDLE} ) {
+		close( $self->{_FILE_HANDLE} );
+	}
 }
 
 #private method. sets the separators.
@@ -84,6 +99,8 @@ sub _set_separator {
 		close( $self->{_FILE_HANDLE} );
 		die "error: invalid file format $self->{file}\n";
 	}
+
+	#set the segment terminator
 	my $terminator = substr( $isa, 106, 2 );
 	if ( $terminator =~ /\r\n/ ) {
 		$self->{_SEGMENT_SEPARATOR} = substr( $isa, 105, 3 );
@@ -94,7 +111,11 @@ sub _set_separator {
 	else {
 		$self->{_SEGMENT_SEPARATOR} = substr( $isa, 105, 1 );
 	}
-	$self->{_ELEMENT_SEPARATOR}    = substr( $isa, 3,   1 );
+
+	#set the element separator
+	$self->{_ELEMENT_SEPARATOR} = substr( $isa, 3, 1 );
+
+	#set the sub element separator
 	$self->{_SUBELEMENT_SEPARATOR} = substr( $isa, 104, 1 );
 	seek( $self->{_FILE_HANDLE}, -108, 1 );
 }
@@ -254,7 +275,7 @@ X12::Parser - Perl module for parsing X12 Transaction files
   my $p = new X12::Parser;
 
   # Parse a file with the transaction specific configuration file
-  $p->parse_file ( file => '837.txt',
+  $p->parsefile ( file => '837.txt',
               conf => 'X12-837P.cf' 
             );
 
@@ -295,8 +316,7 @@ $p = new X12::Parser;
    arguments. It only initializes the members variables required
    for parsing the transaction file.
 
-$p->parse_file(file => '837.txt', conf => 'X12-837P.cf'); (*recommended)
-$p->parse(file => '837.txt', conf => 'X12-837P.cf');
+$p->parsefile(file => '837.txt', conf => 'X12-837P.cf');
    This method takes two arguments. The first argument is the 
    transaction file that needs to be parsed. The second argument 
    specifies the configuration file to be used for parsing the 
@@ -310,7 +330,15 @@ $p->parse(file => '837.txt', conf => 'X12-837P.cf');
 
    To create your own configuration file read the X12::Parser::Readme 
    man page.
+   
+open($file, '837.txt');
+$p->parse(handle => $file, conf => 'X12-837P.cf');
+   This method is similar to parsefile, except it takes an open 
+   file handle as input.
 
+$p->closefile();
+   Close a X12 file that was opened explicitly.
+   
 $p->get_next_loop;
    This function returns the name of the next loop that is present
    in the file being parsed. The loop name is as specified in the cf

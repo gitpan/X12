@@ -1,4 +1,24 @@
 
+
+X12::Parser 0.60
+-------------------------------------------------------------------------------
+1. Attention: users of previous version  
+   parse_file() has been renamed to parsefile().
+   parsefile ( file => $file, conf => $conf );
+   Users using the parse() methods to parse a X12 file should
+   now use the parsefile() method. 
+
+2. Attention: users of previous version  
+   parse() method signature has changed.
+   new signature is parse ( handle => $handle, conf => $conf );
+   takes an already open file handle as input.
+
+3. closefile() method is added.
+   If you do not parse the entire X12 file using get_next_loop()
+   method, then it is recommended that you call closefile() to 
+   close the file being parsed. 
+
+
 X12::Parser 0.50
 -------------------------------------------------------------------------------
 1. Many improvements (almost a rewrite) have gone into this version. 
