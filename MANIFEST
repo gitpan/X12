@@ -22,4 +22,5 @@ cf/997.cf                    cf file
 t/1.t                        test file
 t/2.t                        test file
 t/3.t                        test file
+t/4.t                        test file
 t/sample_835.txt             data for test file

@@ -1,4 +1,4 @@
-X12 version 0.60
+X12 version 0.70
 ================
 
 X12::Parser - Perl module for parsing X12 data/transaction files

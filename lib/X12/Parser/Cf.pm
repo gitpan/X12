@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT    = qw(
 );
-our $VERSION = '0.60';
+our $VERSION = '0.70';
 
 # Preloaded methods go here.
 use X12::Parser::Tree;
@@ -51,7 +51,7 @@ sub load {
 
 	#parse the LOOPS section of the config file
 	for ( my $i = $pos ; $i < scalar @{ $self->{_LINES} } ; $i++ ) {
-		if ( $self->{_LINES}->[$i] !~ /^[a-zA-Z0-9]/ ) {
+		if ( $self->{_LINES}->[$i] !~ /^[a-zA-Z0-9#]/ ) {
 			last;
 		}
 		else {
@@ -92,7 +92,7 @@ sub _parse_loop {
 			$end = substr $self->{_LINES}->[$i], 5;
 			$self->_parse_loop( $child, $end );
 		}
-		if ( $self->{_LINES}->[$i] !~ /^[a-zA-Z0-9]/ ) {
+		if ( $self->{_LINES}->[$i] !~ /^[a-zA-Z0-9#]/ ) {
 			last;
 		}
 	}
@@ -107,24 +107,24 @@ X12::Parser::Cf - Perl module for reading X12 configuration files.
 
 =head1 SYNOPSIS
 
-  use X12::Parser::Cf;
+    use X12::Parser::Cf;
 
-  # Create a X12::Parser::Cf object
-  my $cf = new X12::Parser::Cf;
+    # Create a X12::Parser::Cf object
+    my $cf = new X12::Parser::Cf;
 
-  # Read/load a cf file
-  $cf->load ( file => '837_004010X098.cf' );
+    # Read/load a cf file
+    $cf->load ( file => '837_004010X098.cf' );
 
 =head1 DESCRIPTION
 
 X12::Parser::Cf module is created to read the configuration files that 
 are created for parsing X12 transaction files. This module is used in
-the X12::Parser module and is not designed for independent usage.
+the L<X12::Parser> module and is not designed for independent usage.
 
 Note that this module does not do syntax checking of the configuration 
 file. The user should ensure that he has got the cf file correct.
 
-Read the X12::Parser::Readme man page for details.
+Read the L<X12::Parser::Readme> man page for details.
 
 The sample cf files provided with this package are good to the best of
 the authors knowledge. However the user should ensure the validity of
@@ -137,7 +137,7 @@ Prasad Balan, I<prasad@cpan.org>
 
 =head1 SEE ALSO
 
-I<X12::Parser>, I<X12::Parser::Readme>, I<X12::Parser::Tree> 
+L<X12::Parser>, L<X12::Parser::Readme>, L<X12::Parser::Tree> 
 
 =head1 COPYRIGHT AND LICENSE
 

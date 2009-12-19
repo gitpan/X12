@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT    = qw(
 );
-our $VERSION = '0.60';
+our $VERSION = '0.70';
 
 # Preloaded methods go here.
 #use X12::Parser::Tree;
@@ -155,25 +155,26 @@ X12::Parser::Tree - Object structure representing the X12 cf file.
 
 =head1 SYNOPSIS
 
-  use X12::Parser::Tree;
+    use X12::Parser::Tree;
 
-#create a new Tree object
-  my $node = X12::Parser::Tree->new();
+    #create a new Tree object
+    my $node = X12::Parser::Tree->new();
 
-#set the name of the node/loop
-  $node->set_name('1000A');
+    #set the name of the node/loop
+    $node->set_name('1000A');
 
-#set the name of the parameters used to determine start of a loop
-  $node->set_loop_start_parm('NM1', '41', 1);
+    #set the name of the parameters used to determine start of a loop
+    $node->set_loop_start_parm('NM1', '41', 1);
 
-#create a new Tree object and set it as the child
-  my $child_node = X12::Parser::Tree->new();
-  $node->add_child($child_node);
+    #create a new Tree object and set it as the child
+    my $child_node = X12::Parser::Tree->new();
+    $node->add_child($child_node);
 
 =head1 DESCRIPTION
 
-This module represents the cf file as a object structure. The class
-is meant to be used in conjunction with X12::Parser::Cf. 
+This module represents the cf file as a object structure. This class is 
+used by the L<X12::Parser> and L<X12::Parser::Cf>. Unless you plan to modify the
+parser or such you would not need to access this class directly. 
 
 =head1 AUTHOR
 
@@ -181,7 +182,7 @@ Prasad Poruporuthan, I<prasad@cpan.org>
 
 =head1 SEE ALSO
 
-I<X12::Parser>, I<X12::Parser::Cf>, I<X12::Parser::Readme>
+L<X12::Parser>, L<X12::Parser::Cf>, L<X12::Parser::Readme>
 
 =head1 COPYRIGHT AND LICENSE
 

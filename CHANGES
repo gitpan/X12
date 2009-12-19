@@ -1,4 +1,14 @@
 
+X12::Parser 0.70
+-------------------------------------------------------------------------------
+1. Some errors related to file handling have been fixed. Versions 0.50
+   and 0.60 were impacted. get_next_pos_loop, get_next_pos_level_loop,
+   print_tree were impacted.
+   The error was as a result of calling readline() on a closed file 
+   handle. 
+
+2. The pods have been better formatted.
+
 
 X12::Parser 0.60
 -------------------------------------------------------------------------------

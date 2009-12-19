@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT    = qw(
 );
-our $VERSION = '0.60';
+our $VERSION = '0.70';
 
 # Preloaded methods go here.
 use X12::Parser::Tree;
@@ -37,6 +37,7 @@ sub new {
 		_TREE_ROOT            => undef,
 		_TREE_POS             => undef,
 		_FILE_HANDLE          => undef,
+		_FILE_CLOSED          => undef,
 		_SEGMENT_SEPARATOR    => undef,
 		_ELEMENT_SEPARATOR    => undef,
 		_SUBELEMENT_SEPARATOR => undef,
@@ -54,6 +55,7 @@ sub parse {
 	$self->{handle}       = $params{handle};
 	$self->{conf}         = $params{conf};
 	$self->{_FILE_HANDLE} = $params{handle};
+	$self->{_FILE_CLOSED} = undef;
 
 	#read the config file to create the TREE object
 	my $cf = X12::Parser::Cf->new();
@@ -77,6 +79,7 @@ sub parsefile {
 	#without closing the file
 	if ( defined $self->{_FILE_HANDLE} ) {
 		close( $self->{_FILE_HANDLE} );
+		$self->{_FILE_CLOSED} = 1;
 	}
 	open( my $handle, "$self->{file}" )
 	  || die "error: cannot open file $self->{file}\n";
@@ -88,6 +91,7 @@ sub closefile {
 	my $self = shift;
 	if ( defined $self->{_FILE_HANDLE} ) {
 		close( $self->{_FILE_HANDLE} );
+		$self->{_FILE_CLOSED} = 1;
 	}
 }
 
@@ -97,6 +101,7 @@ sub _set_separator {
 	my $isa  = undef;
 	if ( read( $self->{_FILE_HANDLE}, $isa, 108 ) != 108 ) {
 		close( $self->{_FILE_HANDLE} );
+		$self->{_FILE_CLOSED} = 1;
 		die "error: invalid file format $self->{file}\n";
 	}
 
@@ -143,7 +148,12 @@ sub get_next_pos_loop {
 	}
 	else {
 		$loop = $self->_get_next_loop();
-		return ( $., $loop );
+		if ( defined $loop ) {
+			return ( $., $loop );
+		}
+		else {
+			return;
+		}
 	}
 }
 
@@ -157,7 +167,12 @@ sub get_next_pos_level_loop {
 	}
 	else {
 		$loop = $self->_get_next_loop();
-		return ( $., $self->{_TREE_POS}->get_depth(), $loop );
+		if ( defined $loop ) {
+			return ( $., $self->{_TREE_POS}->get_depth(), $loop );
+		}
+		else {
+			return;
+		}
 	}
 }
 
@@ -170,26 +185,30 @@ sub _get_next_loop {
 	$file_handle   = $self->{_FILE_HANDLE};
 	$node          = $self->{_TREE_POS};
 	$self->{_LOOP} = [];
-	if ( defined $self->{_LAST_SEGMENT} ) {
-		push( @{ $self->{_LOOP} }, $self->{_LAST_SEGMENT} );
-		$self->{_LAST_SEGMENT} = undef;
+	if ( defined $self->{_NEXT_SEGMENT} ) {
+		push( @{ $self->{_LOOP} }, $self->{_NEXT_SEGMENT} );
+		$self->{_NEXT_SEGMENT} = undef;
+	}
+	if ( defined $self->{_FILE_CLOSED} ) {
+		return undef;
 	}
 	while ( $segment = <$file_handle> ) {
 		chomp($segment);
 		@element = split( /\Q$self->{_ELEMENT_SEPARATOR}\E/, $segment );
 		$loop = $self->_check_child_match( $node, \@element );
 		if ( defined $loop ) {
-			$self->{_LAST_SEGMENT} = $segment;
+			$self->{_NEXT_SEGMENT} = $segment;
 			return $loop;
 		}
 		$loop = $self->_check_parent_match( $node, \@element );
 		if ( defined $loop ) {
-			$self->{_LAST_SEGMENT} = $segment;
+			$self->{_NEXT_SEGMENT} = $segment;
 			return $loop;
 		}
 		push( @{ $self->{_LOOP} }, $segment );
 	}
 	close($file_handle);
+	$self->{_FILE_CLOSED} = 1;
 	return undef;
 }
 
@@ -259,6 +278,25 @@ sub print_tree {
 		}
 	}
 }
+
+#private method only called for tests
+sub _print_tree {
+	my $self = shift;
+	my ( $pad, $index, $segment );
+	my $tree = undef;
+	my $pos  = $. + 1;
+	while ( my $loop = $self->get_next_loop ) {
+		$pad = '  |' x $self->{_TREE_POS}->get_depth();
+		$tree .= "       $pad--$loop\n";
+		$pad = '  |' x ( $self->{_TREE_POS}->get_depth() + 1 );
+		my @loop = $self->get_loop_segments;
+		foreach $segment (@loop) {
+			$index = sprintf( "%+7s", $pos++ );
+			$tree .= "$index$pad-- $segment\n";
+		}
+	}
+	return $tree;
+}
 1;
 __END__
 # Below is stub documentation for your module. You'd better edit it!
@@ -269,30 +307,31 @@ X12::Parser - Perl module for parsing X12 Transaction files
 
 =head1 SYNOPSIS
 
-  use X12::Parser;
+    use X12::Parser;
 
-  # Create a parser object
-  my $p = new X12::Parser;
+    # Create a parser object
+    my $p = new X12::Parser;
 
-  # Parse a file with the transaction specific configuration file
-  $p->parsefile ( file => '837.txt',
-              conf => 'X12-837P.cf' 
-            );
+    # Parse a file with the transaction specific configuration file
+    $p->parsefile ( 
+        file => '837.txt',
+        conf => 'X12-837P.cf' 
+    );
 
-  # Step through the file 
-  while ( my $loop = $p->get_next_loop ) {
-    my @loop = $p->get_loop_segments; 
-  }
+    # Step through the file 
+    while ( my $loop = $p->get_next_loop ) {
+        my @loop = $p->get_loop_segments; 
+    }
 
-  # or use this method instead 
-  while ( my ($pos, $loop) = $p->get_next_pos_loop ) { 
-    my @loop = $p->get_loop_segments; 
-  }
+    # or use this method instead 
+    while ( my ($pos, $loop) = $p->get_next_pos_loop ) { 
+        my @loop = $p->get_loop_segments; 
+    }
 
-  # or use
-  while ( my ($pos, $level, $loop) = $p->get_next_pos_level_loop ) {
-    my @loop = $p->get_loop_segments; 
-  }
+    # or use
+    while ( my ($pos, $level, $loop) = $p->get_next_pos_level_loop ) {
+        my @loop = $p->get_loop_segments; 
+    }
 
 
 =head1 ABSTRACT
@@ -311,70 +350,108 @@ types.
 
 The following methods are available:
 
-$p = new X12::Parser;
-   This is the object constructor method. It does not take any
-   arguments. It only initializes the members variables required
-   for parsing the transaction file.
+=over 2
 
-$p->parsefile(file => '837.txt', conf => 'X12-837P.cf');
-   This method takes two arguments. The first argument is the 
-   transaction file that needs to be parsed. The second argument 
-   specifies the configuration file to be used for parsing the 
-   transaction file. 
+=item new
 
-   This package is a generic parser for parsing files that use a
-   format similar to the X12 specification. The ability to parse
-   different transaction types is provided by means of using different
-   configuration files. The configuration files for all the X12 HIPAA
-   transactions are provided with this package.
+    $p = new X12::Parser;
 
-   To create your own configuration file read the X12::Parser::Readme 
-   man page.
-   
-open($file, '837.txt');
-$p->parse(handle => $file, conf => 'X12-837P.cf');
-   This method is similar to parsefile, except it takes an open 
-   file handle as input.
+This is the object constructor method. It does not take any
+arguments. It only initializes the members variables required
+for parsing the transaction file.
 
-$p->closefile();
-   Close a X12 file that was opened explicitly.
-   
-$p->get_next_loop;
-   This function returns the name of the next loop that is present
-   in the file being parsed. The loop name is as specified in the cf
-   file.
+=item parsefile
 
-$p->get_loop_segments;
-   This function returns the segments in the loop that was returned
-   by get_next_loop(). This function is to be used in tandem with 
-   the get_next_loop. If not it may return/produce undesired results. 
+    $p->parsefile(file => '837.txt', conf => 'X12-837P.cf');
 
-$p->get_next_pos_loop;
-   This function returns the next loop name and the segment position.
-   Note position 1 corresponds to the first segment. 
+This method takes two arguments. The first argument is the 
+transaction file that needs to be parsed. The second argument 
+specifies the configuration file to be used for parsing the 
+transaction file. 
 
-$p->get_next_pos_level_loop;
-   Same as get_next_pos_loop() except that in addition this function
-   returns the level of the loop. The level corresponds to the level
-   of the loop in the loop hierarchy. The top level loop has level 1.
+To create your own configuration file read the L<X12::Parser::Readme> 
+man page.
 
-$p->print_tree;
-   Prints the transaction file in a tree format.
+=item parse
 
-$p->get_segment_separator;
-   Get the segment separator.
+    open($file, '837.txt');
+    $p->parse(handle => $file, conf => 'X12-837P.cf');
 
-$p->get_element_separator;
-   Get the element separator.
+This method is similar to parsefile, except it takes an open 
+file handle as input.
 
-$p->get_subelement_separator;
-   Get the sub-element separator.
-   
+=item closefile
+
+    $p->closefile();
+
+Close a X12 file. If you parse an X12 file till the very end the Parser will
+close the file. But if you only parse a few segments you can explicitly close
+the file by calling closefile();
+
+=item get_next_loop
+
+    $p->get_next_loop;
+
+This function returns the name of the next loop that is present
+in the file being parsed. The loop name is as specified in the cf
+file.
+
+=item get_loop_segments
+
+    $p->get_loop_segments;
+
+This function returns the segments in the loop that was returned
+by get_next_loop(). This function is to be used in tandem with 
+the get_next_loop. If not it may return/produce undesired results. 
+
+=item get_next_pos_loop
+
+    $p->get_next_pos_loop;
+
+This function returns the next loop name and the segment position.
+Note position 1 corresponds to the first segment. 
+
+=item get_next_pos_level_loop
+
+    $p->get_next_pos_level_loop;
+
+Same as get_next_pos_loop() except that in addition this function
+returns the level of the loop. The level corresponds to the level
+of the loop in the loop hierarchy. The top level loop has level 1.
+
+=item print_tree
+
+    $p->print_tree;
+
+Prints the transaction file in a tree format.
+
+=item get_segment_separator
+
+    $p->get_segment_separator;
+ 
+Get the segment separator.
+
+=item get_element_separator
+
+    $p->get_element_separator;
+
+Get the element separator.
+
+=item get_subelement_separator
+
+    $p->get_subelement_separator;
+
+Get the sub-element separator.
+
+=back
+
 The configuration files provided with this package and the corresponding
-transaction type is mentioned below. These are the X12 HIPAA transactions.
+transaction type are mentioned below. These are the X12 HIPAA transactions.
+
+=begin text
 
             type    configuration file
-            ----    ------------------    
+            ----    ------------------
         1)   270    270_004010X092.cf
         2)   271    271_004010X092.cf
         3)   276    276_004010X093.cf
@@ -388,6 +465,8 @@ transaction type is mentioned below. These are the X12 HIPAA transactions.
         11)  837D   837_004010X097.cf
         12)  837P   837_004010X098.cf
 
+=end text
+
 These cf files are installed in under the X12/Parser/cf folder.
 
 The sample cf files provided with this package are good to the best of
@@ -398,17 +477,18 @@ these files. The user may use them as is at their own risk.
 
 None by default.
 
-
 =head1 SEE ALSO
 
-o For details on Transaction sets refer to:
-National Electronic Data Interchange Transaction Set Implementation 
-Guide. Implementation guides are available for all the Transaction sets.
+For details on Transaction sets refer to: National Electronic Data Interchange 
+Transaction Set Implementation Guide. Implementation guides are available for all 
+the Transaction sets.
 
-o I<X12::Parser::Readme> for more information on the Parser and 
-  configuration files.
+L<X12::Parser::Readme> for more information on the Parser and configuration files.
 
-o I<X12::Parser::Cf>
+L<X12::Parser::Tree>
+
+L<X12::Parser::Cf>
+
 
 If you have a mailing list set up for your module, mention it here.
 
