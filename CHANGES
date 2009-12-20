@@ -1,5 +1,5 @@
 
-X12::Parser 0.70
+X12::Parser 0.80
 -------------------------------------------------------------------------------
 1. Some errors related to file handling have been fixed. Versions 0.50
    and 0.60 were impacted. get_next_pos_loop, get_next_pos_level_loop,

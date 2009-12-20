@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT    = qw(
 );
-our $VERSION = '0.70';
+our $VERSION = '0.80';
 
 # Preloaded methods go here.
 use X12::Parser::Tree;

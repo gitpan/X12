@@ -23,7 +23,7 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT    = qw(
 );
-our $VERSION = '0.70';
+our $VERSION = '0.80';
 
 # Preloaded methods go here.
 use X12::Parser::Tree;
@@ -266,11 +266,10 @@ sub get_subelement_separator {
 sub print_tree {
 	my $self = shift;
 	my ( $pad, $index, $segment );
-	my $pos = $. + 1;
-	while ( my $loop = $self->get_next_loop ) {
-		$pad = '  |' x $self->{_TREE_POS}->get_depth();
+	while ( my ( $pos, $level, $loop ) = $self->get_next_pos_level_loop ) {
+		$pad = '  |' x $level;
 		print "       $pad--$loop\n";
-		$pad = '  |' x ( $self->{_TREE_POS}->get_depth() + 1 );
+		$pad = '  |' x ( $level + 1 );
 		my @loop = $self->get_loop_segments;
 		foreach $segment (@loop) {
 			$index = sprintf( "%+7s", $pos++ );
@@ -282,13 +281,11 @@ sub print_tree {
 #private method only called for tests
 sub _print_tree {
 	my $self = shift;
-	my ( $pad, $index, $segment );
-	my $tree = undef;
-	my $pos  = $. + 1;
-	while ( my $loop = $self->get_next_loop ) {
-		$pad = '  |' x $self->{_TREE_POS}->get_depth();
+	my ( $pad, $index, $segment, $tree );
+	while ( my ( $pos, $level, $loop ) = $self->get_next_pos_level_loop ) {
+		$pad = '  |' x $level;
 		$tree .= "       $pad--$loop\n";
-		$pad = '  |' x ( $self->{_TREE_POS}->get_depth() + 1 );
+		$pad = '  |' x ( $level + 1 );
 		my @loop = $self->get_loop_segments;
 		foreach $segment (@loop) {
 			$index = sprintf( "%+7s", $pos++ );
@@ -448,8 +445,6 @@ Get the sub-element separator.
 The configuration files provided with this package and the corresponding
 transaction type are mentioned below. These are the X12 HIPAA transactions.
 
-=begin text
-
             type    configuration file
             ----    ------------------
         1)   270    270_004010X092.cf
@@ -464,8 +459,6 @@ transaction type are mentioned below. These are the X12 HIPAA transactions.
         10)  837I   837_004010X096.cf
         11)  837D   837_004010X097.cf
         12)  837P   837_004010X098.cf
-
-=end text
 
 These cf files are installed in under the X12/Parser/cf folder.
 

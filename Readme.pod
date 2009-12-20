@@ -166,8 +166,6 @@ ANSI ASC X12.85, Health Care Claim Payment/Advice (835) transaction.
 
 A 835 transaction structure would contain the following loops.
 
-=begin text 
-
     ISA
     |-- GS
         |-- ST
@@ -179,8 +177,6 @@ A 835 transaction structure would contain the following loops.
         |-- SE
     |-- GE
     IEA
-
-=end text
 
 The above diagram shows the hierarchy of the loops. The data segments
 are not shown.
@@ -263,13 +259,9 @@ Follow the same procedure to define all the loops and sub-loops.
  
 B<(9)> Here's a description of the fields of the values for segment.
 
-=begin text
-
        segment=N1:1:PR:Payer Identification:R:1
                |  |  |            |         | |
               (a)(b)(c)          (d)       (e)(f)
-
-=end text
 
 B<(a)> specify the segment id here. Loop 1000A starts with N1 so specify N1 here.
 
